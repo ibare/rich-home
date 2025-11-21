@@ -23,7 +23,7 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5200')
-    mainWindow.webContents.openDevTools()
+    // DevTools는 Cmd+Option+I로 수동으로 열기
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }

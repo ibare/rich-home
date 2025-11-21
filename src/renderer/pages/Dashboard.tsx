@@ -1,11 +1,22 @@
-import { Box, Card, CardContent, Grid, Typography } from '@mui/material'
+import { useEffect } from 'react'
+import { Box, Grid, Typography, Avatar, Stack } from '@mui/material'
 import {
-  TrendingUp as IncomeIcon,
-  TrendingDown as ExpenseIcon,
-  AccountBalance as BalanceIcon,
-} from '@mui/icons-material'
+  IconArrowUpRight,
+  IconArrowDownRight,
+  IconWallet,
+} from '@tabler/icons-react'
+import { usePageContext } from '../contexts/PageContext'
+import DashboardCard from '../components/shared/DashboardCard'
 
 export default function Dashboard() {
+  const { setPageTitle, setOnAdd } = usePageContext()
+
+  useEffect(() => {
+    setPageTitle('대시보드')
+    setOnAdd(null)
+    return () => setOnAdd(null)
+  }, [setPageTitle, setOnAdd])
+
   // TODO: 실제 데이터로 교체
   const summary = {
     totalBalance: 5000000,
@@ -22,103 +33,98 @@ export default function Dashboard() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        대시보드
-      </Typography>
-
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    backgroundColor: 'primary.light',
-                    color: 'white',
-                  }}
-                >
-                  <BalanceIcon />
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    총 자산
-                  </Typography>
-                  <Typography variant="h5" fontWeight={600}>
-                    {formatCurrency(summary.totalBalance)}
-                  </Typography>
-                </Box>
+        {/* 총 자산 */}
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <DashboardCard>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Avatar
+                sx={{
+                  bgcolor: 'primary.light',
+                  width: 48,
+                  height: 48,
+                }}
+              >
+                <IconWallet size="24" color="#5D87FF" />
+              </Avatar>
+              <Box>
+                <Typography variant="subtitle2" color="textSecondary">
+                  총 자산
+                </Typography>
+                <Typography variant="h4" fontWeight={600}>
+                  {formatCurrency(summary.totalBalance)}
+                </Typography>
               </Box>
-            </CardContent>
-          </Card>
+            </Stack>
+          </DashboardCard>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    backgroundColor: 'success.light',
-                    color: 'white',
-                  }}
-                >
-                  <IncomeIcon />
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    이번 달 수입
-                  </Typography>
-                  <Typography variant="h5" fontWeight={600} color="success.main">
-                    {formatCurrency(summary.monthlyIncome)}
-                  </Typography>
-                </Box>
+        {/* 이번 달 수입 */}
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <DashboardCard>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Avatar
+                sx={{
+                  bgcolor: 'success.light',
+                  width: 48,
+                  height: 48,
+                }}
+              >
+                <IconArrowUpRight size="24" color="#13DEB9" />
+              </Avatar>
+              <Box>
+                <Typography variant="subtitle2" color="textSecondary">
+                  이번 달 수입
+                </Typography>
+                <Typography variant="h4" fontWeight={600} color="success.main">
+                  {formatCurrency(summary.monthlyIncome)}
+                </Typography>
               </Box>
-            </CardContent>
-          </Card>
+            </Stack>
+          </DashboardCard>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    backgroundColor: 'error.light',
-                    color: 'white',
-                  }}
-                >
-                  <ExpenseIcon />
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    이번 달 지출
-                  </Typography>
-                  <Typography variant="h5" fontWeight={600} color="error.main">
-                    {formatCurrency(summary.monthlyExpense)}
-                  </Typography>
-                </Box>
+        {/* 이번 달 지출 */}
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <DashboardCard>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Avatar
+                sx={{
+                  bgcolor: 'error.light',
+                  width: 48,
+                  height: 48,
+                }}
+              >
+                <IconArrowDownRight size="24" color="#FA896B" />
+              </Avatar>
+              <Box>
+                <Typography variant="subtitle2" color="textSecondary">
+                  이번 달 지출
+                </Typography>
+                <Typography variant="h4" fontWeight={600} color="error.main">
+                  {formatCurrency(summary.monthlyExpense)}
+                </Typography>
               </Box>
-            </CardContent>
-          </Card>
+            </Stack>
+          </DashboardCard>
         </Grid>
 
-        <Grid size={{ xs: 12 }}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                최근 거래
-              </Typography>
-              <Typography color="text.secondary">
-                거래 내역이 없습니다. 새 거래를 추가해보세요.
-              </Typography>
-            </CardContent>
-          </Card>
+        {/* 최근 거래 */}
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <DashboardCard title="최근 거래">
+            <Typography color="textSecondary" textAlign="center" py={4}>
+              거래 내역이 없습니다. 새 거래를 추가해보세요.
+            </Typography>
+          </DashboardCard>
+        </Grid>
+
+        {/* 카테고리별 지출 */}
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <DashboardCard title="카테고리별 지출">
+            <Typography color="textSecondary" textAlign="center" py={4}>
+              이번 달 지출 내역이 없습니다.
+            </Typography>
+          </DashboardCard>
         </Grid>
       </Grid>
     </Box>

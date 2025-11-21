@@ -44,10 +44,12 @@
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
     "@mui/x-date-pickers": "^8.19.0",
+    "@tabler/icons-react": "^3.35.0",
     "better-sqlite3": "^12.4.5",
     "date-fns": "^4.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-mui-sidebar": "^1.6.10",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.4.1",
     "uuid": "^13.0.0"

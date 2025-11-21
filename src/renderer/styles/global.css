@@ -2,11 +2,19 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 html, body, #root {
   height: 100%;
   width: 100%;
+}
+
+/* 입력 필드는 선택 가능하게 */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 body {
