@@ -3,7 +3,6 @@ import {
   Box,
   Grid,
   Typography,
-  Avatar,
   Stack,
   Chip,
   LinearProgress,
@@ -275,22 +274,14 @@ export default function Dashboard() {
         {/* 순자산 */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <DashboardCard>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Avatar
-                sx={{
-                  bgcolor: 'primary.light',
-                  width: 48,
-                  height: 48,
-                }}
-              >
-                <IconWallet size="24" color="#5D87FF" />
-              </Avatar>
-              <Box>
-                <Typography variant="subtitle2" color="textSecondary">
+            <Stack spacing={1.5}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <IconWallet size={18} color="#5D87FF" />
+                <Typography variant="body2" color="textSecondary">
                   순자산
                 </Typography>
-                <AmountText amount={data.netWorth} currency="KRW" variant="h5" fontWeight={600} />
-              </Box>
+              </Stack>
+              <AmountText amount={data.netWorth} currency="KRW" variant="h4" fontWeight={700} />
             </Stack>
           </DashboardCard>
         </Grid>
@@ -298,22 +289,14 @@ export default function Dashboard() {
         {/* 계좌 잔고 */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <DashboardCard>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Avatar
-                sx={{
-                  bgcolor: 'info.light',
-                  width: 48,
-                  height: 48,
-                }}
-              >
-                <IconBuildingBank size="24" color="#49BEFF" />
-              </Avatar>
-              <Box>
-                <Typography variant="subtitle2" color="textSecondary">
+            <Stack spacing={1.5}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <IconBuildingBank size={18} color="#49BEFF" />
+                <Typography variant="body2" color="textSecondary">
                   계좌 잔고
                 </Typography>
-                <AmountText amount={data.totalAccountBalance} currency="KRW" variant="h5" fontWeight={600} />
-              </Box>
+              </Stack>
+              <AmountText amount={data.totalAccountBalance} currency="KRW" variant="h4" fontWeight={700} />
             </Stack>
           </DashboardCard>
         </Grid>
@@ -321,22 +304,14 @@ export default function Dashboard() {
         {/* 자산 */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <DashboardCard>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Avatar
-                sx={{
-                  bgcolor: 'success.light',
-                  width: 48,
-                  height: 48,
-                }}
-              >
-                <IconHome size="24" color="#13DEB9" />
-              </Avatar>
-              <Box>
-                <Typography variant="subtitle2" color="textSecondary">
+            <Stack spacing={1.5}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <IconHome size={18} color="#13DEB9" />
+                <Typography variant="body2" color="textSecondary">
                   자산
                 </Typography>
-                <AmountText amount={data.totalAssets} currency="KRW" variant="h5" fontWeight={600} color="success.main" />
-              </Box>
+              </Stack>
+              <AmountText amount={data.totalAssets} currency="KRW" variant="h4" fontWeight={700} />
             </Stack>
           </DashboardCard>
         </Grid>
@@ -344,22 +319,14 @@ export default function Dashboard() {
         {/* 부채 */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <DashboardCard>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Avatar
-                sx={{
-                  bgcolor: 'error.light',
-                  width: 48,
-                  height: 48,
-                }}
-              >
-                <IconCreditCard size="24" color="#FA896B" />
-              </Avatar>
-              <Box>
-                <Typography variant="subtitle2" color="textSecondary">
+            <Stack spacing={1.5}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <IconCreditCard size={18} color="#FA896B" />
+                <Typography variant="body2" color="textSecondary">
                   부채
                 </Typography>
-                <AmountText amount={data.totalLiabilities} currency="KRW" variant="h5" fontWeight={600} color="error.main" />
-              </Box>
+              </Stack>
+              <AmountText amount={data.totalLiabilities} currency="KRW" variant="h4" fontWeight={700} />
             </Stack>
           </DashboardCard>
         </Grid>
