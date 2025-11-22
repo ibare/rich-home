@@ -23,10 +23,7 @@ import {
   DialogActions,
 } from '@mui/material'
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconCopy,
-  IconCheck,
   IconLock,
   IconX,
   IconEdit,
@@ -34,6 +31,7 @@ import {
 import { usePageContext } from '../contexts/PageContext'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
 import AmountText from '../components/shared/AmountText'
+import MonthNavigation from '../components/shared/MonthNavigation'
 
 interface BudgetItem {
   id: string
@@ -80,6 +78,9 @@ export default function Budget() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
 
+  // 월별 데이터 존재 여부
+  const [monthsWithData, setMonthsWithData] = useState<Set<number>>(new Set())
+
   useEffect(() => {
     setPageTitle('예산 관리')
     setOnAdd(() => setModalOpen(true))
@@ -87,8 +88,26 @@ export default function Budget() {
   }, [setPageTitle, setOnAdd])
 
   useEffect(() => {
+    loadMonthsWithData()
+  }, [selectedYear])
+
+  useEffect(() => {
     loadData()
   }, [selectedYear, selectedMonth])
+
+  // 해당 연도의 월별 예산 존재 여부 조회
+  const loadMonthsWithData = async () => {
+    try {
+      const result = await window.electronAPI.db.query(
+        'SELECT DISTINCT month FROM monthly_budgets WHERE year = ?',
+        [selectedYear]
+      ) as { month: number }[]
+
+      setMonthsWithData(new Set(result.map((r) => r.month)))
+    } catch (error) {
+      console.error('Failed to load months with data:', error)
+    }
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -208,25 +227,6 @@ export default function Budget() {
     }
   }
 
-  // 월 확정
-  const confirmMonth = async () => {
-    if (monthlyBudgets.length === 0) {
-      alert('확정할 예산이 없습니다.')
-      return
-    }
-
-    try {
-      await window.electronAPI.db.query(
-        'UPDATE monthly_budgets SET is_confirmed = 1 WHERE year = ? AND month = ?',
-        [selectedYear, selectedMonth]
-      )
-      loadData()
-    } catch (error) {
-      console.error('Failed to confirm month:', error)
-      alert('월 확정에 실패했습니다.')
-    }
-  }
-
   // 금액 수정
   const handleEditClick = (budget: MonthlyBudget) => {
     setEditingBudget(budget)
@@ -260,22 +260,6 @@ export default function Budget() {
   const isConfirmed = monthlyBudgets.length > 0 && monthlyBudgets.every((b) => b.is_confirmed)
   const totalBudget = monthlyBudgets.reduce((sum, b) => sum + b.amount, 0)
 
-  const navigateMonth = (direction: number) => {
-    let newMonth = selectedMonth + direction
-    let newYear = selectedYear
-
-    if (newMonth > 12) {
-      newMonth = 1
-      newYear++
-    } else if (newMonth < 1) {
-      newMonth = 12
-      newYear--
-    }
-
-    setSelectedMonth(newMonth)
-    setSelectedYear(newYear)
-  }
-
   if (loading) {
     return (
       <Box>
@@ -293,62 +277,42 @@ export default function Budget() {
 
       {tab === 0 && (
         <>
-          {/* 월 선택 */}
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <IconButton onClick={() => navigateMonth(-1)}>
-                    <IconChevronLeft />
-                  </IconButton>
-                  <Typography variant="h5" fontWeight={600}>
-                    {selectedYear}년 {selectedMonth}월
-                  </Typography>
-                  <IconButton onClick={() => navigateMonth(1)}>
-                    <IconChevronRight />
-                  </IconButton>
-                  {isConfirmed && (
-                    <Chip
-                      icon={<IconLock size={14} />}
-                      label="확정됨"
-                      color="success"
+          <MonthNavigation
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            onYearChange={setSelectedYear}
+            onMonthChange={setSelectedMonth}
+            monthsWithData={monthsWithData}
+            actionSlot={
+              <Stack direction="row" spacing={1} alignItems="center">
+                {isConfirmed ? (
+                  <Chip
+                    icon={<IconLock size={14} />}
+                    label="마감됨"
+                    color="success"
+                    size="small"
+                  />
+                ) : (
+                  <>
+                    <Button
                       size="small"
-                    />
-                  )}
-                </Stack>
-                <Stack direction="row" spacing={1}>
-                  {!isConfirmed && (
-                    <>
-                      <Button
-                        size="small"
-                        startIcon={<IconCopy size={16} />}
-                        onClick={copyFromTemplate}
-                      >
-                        템플릿 복사
-                      </Button>
-                      <Button
-                        size="small"
-                        startIcon={<IconCopy size={16} />}
-                        onClick={copyFromPrevMonth}
-                      >
-                        전월 복사
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="success"
-                        startIcon={<IconCheck size={16} />}
-                        onClick={confirmMonth}
-                        disabled={monthlyBudgets.length === 0}
-                      >
-                        월 확정
-                      </Button>
-                    </>
-                  )}
-                </Stack>
+                      startIcon={<IconCopy size={16} />}
+                      onClick={copyFromTemplate}
+                    >
+                      템플릿 복사
+                    </Button>
+                    <Button
+                      size="small"
+                      startIcon={<IconCopy size={16} />}
+                      onClick={copyFromPrevMonth}
+                    >
+                      전월 복사
+                    </Button>
+                  </>
+                )}
               </Stack>
-            </CardContent>
-          </Card>
+            }
+          />
 
           {/* 총 예산 */}
           {monthlyBudgets.length > 0 && (

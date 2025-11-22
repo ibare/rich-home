@@ -25,6 +25,7 @@ import {
   Chip,
   Box,
   Divider,
+  Autocomplete,
 } from '@mui/material'
 import { IconX, IconPlus, IconTrash } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
@@ -33,6 +34,8 @@ interface TransactionModalProps {
   open: boolean
   onClose: () => void
   onSaved: () => void
+  selectedYear?: number
+  selectedMonth?: number
 }
 
 interface Category {
@@ -53,25 +56,48 @@ interface PendingTransaction {
   description: string
 }
 
-export default function TransactionModal({ open, onClose, onSaved }: TransactionModalProps) {
+// 해당 월의 마지막 날 계산
+const getLastDayOfMonth = (year: number, month: number) => {
+  const lastDay = new Date(year, month, 0).getDate()
+  return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+}
+
+export default function TransactionModal({ open, onClose, onSaved, selectedYear, selectedMonth }: TransactionModalProps) {
   const [categories, setCategories] = useState<Category[]>([])
   const [pendingList, setPendingList] = useState<PendingTransaction[]>([])
+
+  // 초기 날짜: 선택된 년월의 마지막 날 또는 오늘
+  const getInitialDate = () => {
+    if (selectedYear && selectedMonth) {
+      return getLastDayOfMonth(selectedYear, selectedMonth)
+    }
+    return new Date().toISOString().slice(0, 10)
+  }
+
   const [formData, setFormData] = useState({
     type: 'expense' as 'income' | 'expense',
     amount: '',
     currency: 'KRW',
     category_id: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: getInitialDate(),
     description: '',
   })
   const [saving, setSaving] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
+  const [descriptionSuggestions, setDescriptionSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     if (open) {
       loadCategories()
+      // 모달 열릴 때 선택된 년월의 마지막 날로 날짜 설정
+      if (selectedYear && selectedMonth) {
+        setFormData((prev) => ({
+          ...prev,
+          date: getLastDayOfMonth(selectedYear, selectedMonth),
+        }))
+      }
     }
-  }, [open])
+  }, [open, selectedYear, selectedMonth])
 
   const loadCategories = async () => {
     try {
@@ -84,9 +110,33 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
     }
   }
 
+  // 카테고리별 이전 입력 내용 조회
+  const loadDescriptionSuggestions = async (categoryId: string) => {
+    if (!categoryId) {
+      setDescriptionSuggestions([])
+      return
+    }
+
+    try {
+      const result = await window.electronAPI.db.query(
+        `SELECT DISTINCT description FROM transactions
+         WHERE category_id = ? AND description IS NOT NULL AND description != ''
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [categoryId]
+      ) as { description: string }[]
+
+      setDescriptionSuggestions(result.map((r) => r.description))
+    } catch (error) {
+      console.error('Failed to load description suggestions:', error)
+      setDescriptionSuggestions([])
+    }
+  }
+
   const handleChange = (field: string, value: string) => {
     if (field === 'type') {
       setFormData((prev) => ({ ...prev, [field]: value, category_id: '' }))
+      setDescriptionSuggestions([])
     } else if (field === 'currency') {
       // 통화 변경시 금액 재포맷
       setFormData((prev) => ({
@@ -94,6 +144,9 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
         currency: value,
         amount: prev.amount ? formatNumber(prev.amount.replace(/,/g, ''), value) : '',
       }))
+    } else if (field === 'category_id') {
+      setFormData((prev) => ({ ...prev, [field]: value }))
+      loadDescriptionSuggestions(value)
     } else {
       setFormData((prev) => ({ ...prev, [field]: value }))
     }
@@ -162,11 +215,10 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
 
     setPendingList((prev) => [...prev, newTransaction])
 
-    // 폼 초기화 (날짜, 타입, 통화는 유지)
+    // 금액과 내용만 초기화 (날짜, 타입, 통화, 카테고리 유지)
     setFormData((prev) => ({
       ...prev,
       amount: '',
-      category_id: '',
       description: '',
     }))
 
@@ -266,7 +318,17 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
         {/* 입력 폼 */}
         <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 2, mb: 2 }}>
           <Stack spacing={2}>
+            {/* 첫 번째 줄: 날짜, 수입/지출 */}
             <Stack direction="row" spacing={2} alignItems="center">
+              {/* 날짜 */}
+              <TextField
+                type="date"
+                value={formData.date}
+                onChange={(e) => handleChange('date', e.target.value)}
+                size="small"
+                sx={{ width: 160 }}
+              />
+
               {/* 수입/지출 */}
               <ToggleButtonGroup
                 value={formData.type}
@@ -281,16 +343,10 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
                   수입
                 </ToggleButton>
               </ToggleButtonGroup>
+            </Stack>
 
-              {/* 날짜 */}
-              <TextField
-                type="date"
-                value={formData.date}
-                onChange={(e) => handleChange('date', e.target.value)}
-                size="small"
-                sx={{ width: 160 }}
-              />
-
+            {/* 두 번째 줄: 통화, 카테고리, 금액, 내용, 추가 버튼 */}
+            <Stack direction="row" spacing={2} onKeyDown={handleKeyDown}>
               {/* 통화 */}
               <ToggleButtonGroup
                 value={formData.currency}
@@ -305,25 +361,6 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
                   AED
                 </ToggleButton>
               </ToggleButtonGroup>
-            </Stack>
-
-            <Stack direction="row" spacing={2} onKeyDown={handleKeyDown}>
-              {/* 금액 */}
-              <TextField
-                inputRef={amountRef}
-                label="금액"
-                value={formData.amount}
-                onChange={handleAmountChange}
-                size="small"
-                sx={{ width: 150 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">{formData.currency}</InputAdornment>
-                  ),
-                }}
-                placeholder="0"
-                autoFocus
-              />
 
               {/* 카테고리 */}
               <FormControl size="small" sx={{ minWidth: 150 }}>
@@ -364,14 +401,40 @@ export default function TransactionModal({ open, onClose, onSaved }: Transaction
                 </Select>
               </FormControl>
 
-              {/* 내용 */}
+              {/* 금액 */}
               <TextField
-                label="내용 (선택)"
-                value={formData.description}
-                onChange={(e) => handleChange('description', e.target.value)}
+                inputRef={amountRef}
+                label="금액"
+                value={formData.amount}
+                onChange={handleAmountChange}
                 size="small"
+                sx={{ width: 150 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">{formData.currency}</InputAdornment>
+                  ),
+                }}
+                placeholder="0"
+                autoFocus
+              />
+
+              {/* 내용 */}
+              <Autocomplete
+                freeSolo
+                options={descriptionSuggestions}
+                value={formData.description}
+                onChange={(_, newValue) => handleChange('description', newValue || '')}
+                onInputChange={(_, newInputValue) => handleChange('description', newInputValue)}
+                disabled={!formData.category_id}
                 sx={{ flex: 1 }}
-                placeholder="예: 이마트 장보기"
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="내용 (선택)"
+                    size="small"
+                    placeholder={formData.category_id ? "예: 이마트 장보기" : "카테고리를 먼저 선택하세요"}
+                  />
+                )}
               />
 
               {/* 추가 버튼 */}

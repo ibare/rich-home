@@ -6,6 +6,7 @@ import Sidebar from './components/layout/sidebar/Sidebar'
 import Header from './components/layout/header/Header'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
+import MonthlyClosing from './pages/MonthlyClosing'
 import Accounts from './pages/Accounts'
 import AccountBalanceHistory from './pages/AccountBalanceHistory'
 import Assets from './pages/Assets'
@@ -17,17 +18,19 @@ import Settings from './pages/Settings'
 
 const MainWrapper = styled('div')(() => ({
   display: 'flex',
-  minHeight: '100vh',
+  height: '100vh',
   width: '100%',
+  overflow: 'hidden',
 }))
 
 const PageWrapper = styled('div')(({ theme }) => ({
   display: 'flex',
-  flexGrow: 1,
-  paddingBottom: '60px',
+  flex: 1,
   flexDirection: 'column',
   zIndex: 1,
   backgroundColor: theme.palette.background.paper,
+  overflow: 'hidden',
+  minWidth: 0,
 }))
 
 function App() {
@@ -47,16 +50,48 @@ function App() {
           <PageWrapper>
             <Header toggleMobileSidebar={() => setMobileSidebarOpen(true)} />
 
-            <Container
+            <Box
               sx={{
-                paddingTop: '20px',
-                maxWidth: '1200px',
+                flex: 1,
+                overflow: 'auto',
+                paddingBottom: '60px',
+                // 스크롤바 기본 숨김, 호버 시 표시
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: 'transparent',
+                  borderRadius: '4px',
+                  transition: 'background 0.2s',
+                },
+                '&:hover::-webkit-scrollbar-thumb': {
+                  background: 'rgba(0, 0, 0, 0.2)',
+                },
+                '&::-webkit-scrollbar-thumb:hover': {
+                  background: 'rgba(0, 0, 0, 0.3)',
+                },
+                // Firefox
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'transparent transparent',
+                '&:hover': {
+                  scrollbarColor: 'rgba(0, 0, 0, 0.2) transparent',
+                },
               }}
             >
-              <Box sx={{ minHeight: 'calc(100vh - 170px)' }}>
+              <Container
+                sx={{
+                  paddingTop: '20px',
+                  paddingBottom: '40px',
+                  maxWidth: '1200px',
+                }}
+              >
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/monthly-closing" element={<MonthlyClosing />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/accounts/:accountId" element={<AccountBalanceHistory />} />
                   <Route path="/assets" element={<Assets />} />
@@ -66,8 +101,8 @@ function App() {
                   <Route path="/statistics" element={<Statistics />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
-              </Box>
-            </Container>
+              </Container>
+            </Box>
           </PageWrapper>
         </MainWrapper>
       </PageProvider>

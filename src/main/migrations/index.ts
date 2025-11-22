@@ -9,10 +9,12 @@ export interface Migration {
 // 마이그레이션 목록 (버전 순서대로)
 import { migration001 } from './001_initial_schema'
 import { migration002 } from './002_amount_to_real'
+import { migration003 } from './003_monthly_closings'
 
 export const migrations: Migration[] = [
   migration001,
   migration002,
+  migration003,
 ]
 
 export function runMigrations(db: BetterSqlite3.Database): void {

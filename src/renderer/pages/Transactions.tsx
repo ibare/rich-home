@@ -7,30 +7,17 @@ import {
   CardContent,
   Chip,
   IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  ToggleButton,
-  ToggleButtonGroup,
-  TextField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Button,
 } from '@mui/material'
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconTrash,
-  IconX,
-} from '@tabler/icons-react'
+import { IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import TransactionModal from '../components/modals/TransactionModal'
 import AmountText from '../components/shared/AmountText'
+import MonthNavigation from '../components/shared/MonthNavigation'
 
 interface Transaction {
   id: string
@@ -55,7 +42,9 @@ export default function Transactions() {
   // 필터
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
-  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
+
+  // 월별 데이터 존재 여부
+  const [monthsWithData, setMonthsWithData] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     setPageTitle('거래 내역')
@@ -64,8 +53,28 @@ export default function Transactions() {
   }, [setPageTitle, setOnAdd])
 
   useEffect(() => {
+    loadMonthsWithData()
+  }, [selectedYear])
+
+  useEffect(() => {
     loadTransactions()
-  }, [selectedYear, selectedMonth, typeFilter])
+  }, [selectedYear, selectedMonth])
+
+  // 해당 연도의 월별 데이터 존재 여부 조회
+  const loadMonthsWithData = async () => {
+    try {
+      const result = await window.electronAPI.db.query(
+        `SELECT DISTINCT CAST(strftime('%m', date) AS INTEGER) as month
+         FROM transactions
+         WHERE strftime('%Y', date) = ?`,
+        [String(selectedYear)]
+      ) as { month: number }[]
+
+      setMonthsWithData(new Set(result.map((r) => r.month)))
+    } catch (error) {
+      console.error('Failed to load months with data:', error)
+    }
+  }
 
   const loadTransactions = async () => {
     setLoading(true)
@@ -76,22 +85,15 @@ export default function Transactions() {
           ? `${selectedYear + 1}-01-01`
           : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      let query = `
+      const query = `
         SELECT t.*, c.name as category_name
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
         WHERE t.date >= ? AND t.date < ?
+        ORDER BY t.date DESC, t.created_at DESC
       `
-      const params: (string | number)[] = [startDate, endDate]
 
-      if (typeFilter !== 'all') {
-        query += ' AND t.type = ?'
-        params.push(typeFilter)
-      }
-
-      query += ' ORDER BY t.date DESC, t.created_at DESC'
-
-      const result = await window.electronAPI.db.query(query, params)
+      const result = await window.electronAPI.db.query(query, [startDate, endDate])
       setTransactions(result as Transaction[])
     } catch (error) {
       console.error('Failed to load transactions:', error)
@@ -108,6 +110,7 @@ export default function Transactions() {
       setDeleteConfirmOpen(false)
       setDeletingId(null)
       loadTransactions()
+      loadMonthsWithData()
     } catch (error) {
       console.error('Failed to delete transaction:', error)
       alert('삭제에 실패했습니다.')
@@ -121,22 +124,6 @@ export default function Transactions() {
       day: 'numeric',
       weekday: 'short',
     })
-  }
-
-  const navigateMonth = (direction: number) => {
-    let newMonth = selectedMonth + direction
-    let newYear = selectedYear
-
-    if (newMonth > 12) {
-      newMonth = 1
-      newYear++
-    } else if (newMonth < 1) {
-      newMonth = 12
-      newYear--
-    }
-
-    setSelectedMonth(newMonth)
-    setSelectedYear(newYear)
   }
 
   // 합계 계산
@@ -159,49 +146,20 @@ export default function Transactions() {
     {} as Record<string, Transaction[]>
   )
 
-  if (loading) {
-    return (
-      <Box>
-        <Typography>로딩 중...</Typography>
-      </Box>
-    )
+  const handleSaved = () => {
+    loadTransactions()
+    loadMonthsWithData()
   }
 
   return (
     <Box>
-      {/* 월 선택 & 필터 */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <IconButton onClick={() => navigateMonth(-1)}>
-                <IconChevronLeft />
-              </IconButton>
-              <Typography variant="h5" fontWeight={600}>
-                {selectedYear}년 {selectedMonth}월
-              </Typography>
-              <IconButton onClick={() => navigateMonth(1)}>
-                <IconChevronRight />
-              </IconButton>
-            </Stack>
-
-            <ToggleButtonGroup
-              value={typeFilter}
-              exclusive
-              onChange={(_, value) => value && setTypeFilter(value)}
-              size="small"
-            >
-              <ToggleButton value="all">전체</ToggleButton>
-              <ToggleButton value="expense" color="error">
-                지출
-              </ToggleButton>
-              <ToggleButton value="income" color="success">
-                수입
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
-        </CardContent>
-      </Card>
+      <MonthNavigation
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        onYearChange={setSelectedYear}
+        onMonthChange={setSelectedMonth}
+        monthsWithData={monthsWithData}
+      />
 
       {/* 요약 */}
       <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
@@ -256,7 +214,11 @@ export default function Transactions() {
       </Stack>
 
       {/* 거래 목록 */}
-      {transactions.length === 0 ? (
+      {loading ? (
+        <Box>
+          <Typography>로딩 중...</Typography>
+        </Box>
+      ) : transactions.length === 0 ? (
         <Card>
           <CardContent>
             <Typography color="textSecondary" textAlign="center" py={4}>
@@ -329,7 +291,9 @@ export default function Transactions() {
       <TransactionModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onSaved={loadTransactions}
+        onSaved={handleSaved}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
       />
 
       {/* 삭제 확인 다이얼로그 */}
