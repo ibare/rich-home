@@ -8,6 +8,12 @@ import {
   Chip,
   ToggleButton,
   ToggleButtonGroup,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material'
 import { IconArrowUpRight, IconArrowDownRight } from '@tabler/icons-react'
 import {
@@ -24,6 +30,7 @@ import {
   Cell,
   ComposedChart,
   Line,
+  Treemap,
 } from 'recharts'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
@@ -38,12 +45,48 @@ interface MonthlyData {
   balance: number
 }
 
+interface TreemapData {
+  name: string
+  size: number
+  color: string
+  id: string
+}
+
+interface CategoryInfo {
+  id: string
+  name: string
+  total: number
+  color: string
+  enabled: boolean
+}
+
+// 카테고리별 색상 팔레트
+const CATEGORY_COLORS = [
+  '#5D87FF', '#13DEB9', '#FFAE1F', '#FA896B', '#49BEFF',
+  '#9C27B0', '#4CAF50', '#FF5722', '#607D8B', '#795548',
+  '#E91E63', '#00BCD4', '#8BC34A', '#FFC107', '#3F51B5',
+]
+
 export default function Statistics() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [loading, setLoading] = useState(true)
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([])
   const [viewType, setViewType] = useState<'flow' | 'bar'>('flow')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+
+  // 카테고리별 지출 분석
+  const [treemapData, setTreemapData] = useState<TreemapData[]>([])
+  const [categoryList, setCategoryList] = useState<CategoryInfo[]>([])
+  const [exchangeRate, setExchangeRate] = useState(385)
+
+  // 기간 범위 선택
+  const [dateRangeType, setDateRangeType] = useState<'all' | 'custom'>('custom')
+  const [fromYear, setFromYear] = useState(new Date().getFullYear())
+  const [fromMonth, setFromMonth] = useState(1)
+  const [toYear, setToYear] = useState(new Date().getFullYear())
+  const [toMonth, setToMonth] = useState(new Date().getMonth() + 1)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
   useEffect(() => {
     setPageTitle('통계')
@@ -53,18 +96,43 @@ export default function Statistics() {
 
   useEffect(() => {
     loadMonthlyData()
+    loadAvailableYears()
   }, [selectedYear])
+
+  useEffect(() => {
+    loadCategoryExpenseData()
+  }, [dateRangeType, fromYear, fromMonth, toYear, toMonth, exchangeRate, categoryList])
+
+  const loadAvailableYears = async () => {
+    try {
+      const result = await window.electronAPI.db.query(`
+        SELECT DISTINCT CAST(strftime('%Y', date) AS INTEGER) as year
+        FROM transactions
+        ORDER BY year
+      `) as { year: number }[]
+      const years = result.map(r => r.year)
+      if (years.length > 0) {
+        setAvailableYears(years)
+      } else {
+        setAvailableYears([new Date().getFullYear()])
+      }
+    } catch (error) {
+      console.error('Failed to load available years:', error)
+      setAvailableYears([new Date().getFullYear()])
+    }
+  }
 
   const loadMonthlyData = async () => {
     setLoading(true)
     try {
       // 환율 조회
       const exchangeRateSetting = (await window.electronAPI.db.query(
-        "SELECT value FROM settings WHERE key = 'exchange_rate_aed_krw'"
+        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
       )) as { value: string }[]
-      const exchangeRate = exchangeRateSetting.length > 0
+      const rate = exchangeRateSetting.length > 0
         ? parseFloat(exchangeRateSetting[0].value)
-        : 370
+        : 385
+      setExchangeRate(rate)
 
       // 월별 수입/지출 집계 (통계 포함 거래만)
       const result = await window.electronAPI.db.query(`
@@ -100,7 +168,7 @@ export default function Statistics() {
       for (const row of result) {
         const key = `${row.year}-${row.month}`
         const existing = monthlyMap.get(key) || { income: 0, expense: 0 }
-        const amountKRW = row.currency === 'AED' ? row.total * exchangeRate : row.total
+        const amountKRW = row.currency === 'AED' ? row.total * rate : row.total
 
         if (row.type === 'income') {
           existing.income += amountKRW
@@ -133,6 +201,101 @@ export default function Statistics() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadCategoryExpenseData = async () => {
+    try {
+      // 날짜 범위 계산
+      let startDate: string
+      let endDate: string
+
+      if (dateRangeType === 'all') {
+        startDate = '1900-01-01'
+        endDate = '2100-12-31'
+      } else {
+        startDate = `${fromYear}-${String(fromMonth).padStart(2, '0')}-01`
+        // 마지막 달의 다음 달 첫날
+        if (toMonth === 12) {
+          endDate = `${toYear + 1}-01-01`
+        } else {
+          endDate = `${toYear}-${String(toMonth + 1).padStart(2, '0')}-01`
+        }
+      }
+
+      const result = await window.electronAPI.db.query(`
+        SELECT
+          c.id as category_id,
+          c.name as category_name,
+          t.currency,
+          SUM(t.amount) as total
+        FROM transactions t
+        JOIN categories c ON t.category_id = c.id
+        WHERE t.type = 'expense'
+          AND t.include_in_stats = 1
+          AND t.date >= ? AND t.date < ?
+        GROUP BY c.id, t.currency
+        ORDER BY total DESC
+      `, [startDate, endDate]) as {
+        category_id: string
+        category_name: string
+        currency: string
+        total: number
+      }[]
+
+      // 카테고리별 총합 계산
+      const categoryTotals = new Map<string, { id: string; name: string; total: number }>()
+      result.forEach(row => {
+        const amountKRW = row.currency === 'AED' ? row.total * exchangeRate : row.total
+        const existing = categoryTotals.get(row.category_id) || { id: row.category_id, name: row.category_name, total: 0 }
+        existing.total += amountKRW
+        categoryTotals.set(row.category_id, existing)
+      })
+
+      // 정렬
+      const sortedCategories = Array.from(categoryTotals.values())
+        .sort((a, b) => b.total - a.total)
+
+      // 카테고리 목록 업데이트 (기존 enabled 상태 유지)
+      const existingEnabledMap = new Map(categoryList.map(c => [c.id, c.enabled]))
+      const categories: CategoryInfo[] = sortedCategories.map((cat, index) => ({
+        id: cat.id,
+        name: cat.name,
+        total: Math.round(cat.total),
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        enabled: existingEnabledMap.has(cat.id) ? existingEnabledMap.get(cat.id)! : true,
+      }))
+
+      // categoryList 변경 시 무한루프 방지
+      const hasChanged = categories.length !== categoryList.length ||
+        categories.some((c, i) => categoryList[i]?.id !== c.id || categoryList[i]?.total !== c.total)
+
+      if (hasChanged) {
+        setCategoryList(categories)
+      }
+
+      // Treemap 데이터 생성 (enabled인 카테고리만)
+      const enabledCategories = categories.filter(c => c.enabled && c.total > 0)
+      const treemap: TreemapData[] = enabledCategories.map(cat => ({
+        name: cat.name,
+        size: cat.total,
+        color: cat.color,
+        id: cat.id,
+      }))
+
+      setTreemapData(treemap)
+    } catch (error) {
+      console.error('Failed to load category expense data:', error)
+    }
+  }
+
+  const handleCategoryToggle = (categoryId: string) => {
+    setCategoryList(prev => prev.map(cat =>
+      cat.id === categoryId ? { ...cat, enabled: !cat.enabled } : cat
+    ))
+  }
+
+  const handleToggleAll = (enabled: boolean) => {
+    setCategoryList(prev => prev.map(cat => ({ ...cat, enabled })))
   }
 
   // 현재까지의 총계
@@ -517,6 +680,216 @@ export default function Statistics() {
             })}
           </Stack>
         </Box>
+      </DashboardCard>
+
+      {/* 카테고리별 지출 분석 */}
+      <DashboardCard title="카테고리별 지출 분석" sx={{ mt: 3 }}>
+        {/* 기간 선택 */}
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }} flexWrap="wrap">
+          <ToggleButtonGroup
+            value={dateRangeType}
+            exclusive
+            onChange={(_, value) => value && setDateRangeType(value)}
+            size="small"
+          >
+            <ToggleButton value="all" sx={{ px: 2 }}>
+              전체
+            </ToggleButton>
+            <ToggleButton value="custom" sx={{ px: 2 }}>
+              기간 선택
+            </ToggleButton>
+          </ToggleButtonGroup>
+
+          {dateRangeType === 'custom' && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <FormControl size="small" sx={{ minWidth: 80 }}>
+                <InputLabel>시작년</InputLabel>
+                <Select
+                  value={fromYear}
+                  label="시작년"
+                  onChange={(e) => setFromYear(e.target.value as number)}
+                >
+                  {availableYears.map(year => (
+                    <MenuItem key={year} value={year}>{year}년</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 70 }}>
+                <InputLabel>월</InputLabel>
+                <Select
+                  value={fromMonth}
+                  label="월"
+                  onChange={(e) => setFromMonth(e.target.value as number)}
+                >
+                  {months.map(month => (
+                    <MenuItem key={month} value={month}>{month}월</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Typography color="textSecondary">~</Typography>
+              <FormControl size="small" sx={{ minWidth: 80 }}>
+                <InputLabel>종료년</InputLabel>
+                <Select
+                  value={toYear}
+                  label="종료년"
+                  onChange={(e) => setToYear(e.target.value as number)}
+                >
+                  {availableYears.map(year => (
+                    <MenuItem key={year} value={year}>{year}년</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 70 }}>
+                <InputLabel>월</InputLabel>
+                <Select
+                  value={toMonth}
+                  label="월"
+                  onChange={(e) => setToMonth(e.target.value as number)}
+                >
+                  {months.map(month => (
+                    <MenuItem key={month} value={month}>{month}월</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+          )}
+        </Stack>
+
+        {treemapData.length > 0 ? (
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+            {/* Treemap */}
+            <Box sx={{ flex: 2, height: 400 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <Treemap
+                  data={treemapData}
+                  dataKey="size"
+                  aspectRatio={4 / 3}
+                  stroke="#fff"
+                  content={({ x, y, width, height, name, value, color }: any) => {
+                    if (width < 30 || height < 30) return null
+                    const displayValue = value >= 10000
+                      ? `${(value / 10000).toFixed(0)}만`
+                      : `${(value / 1000).toFixed(0)}천`
+                    return (
+                      <g>
+                        <rect
+                          x={x}
+                          y={y}
+                          width={width}
+                          height={height}
+                          style={{
+                            fill: color,
+                            stroke: '#fff',
+                            strokeWidth: 2,
+                          }}
+                        />
+                        {width > 60 && height > 40 && (
+                          <>
+                            <text
+                              x={x + width / 2}
+                              y={y + height / 2 - 8}
+                              textAnchor="middle"
+                              fill="#fff"
+                              fontSize={12}
+                              fontWeight={600}
+                            >
+                              {name}
+                            </text>
+                            <text
+                              x={x + width / 2}
+                              y={y + height / 2 + 10}
+                              textAnchor="middle"
+                              fill="#fff"
+                              fontSize={11}
+                            >
+                              {displayValue}원
+                            </text>
+                          </>
+                        )}
+                      </g>
+                    )
+                  }}
+                />
+              </ResponsiveContainer>
+            </Box>
+
+            {/* 카테고리 토글 */}
+            <Box sx={{ flex: 1, minWidth: 200 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="subtitle2" color="textSecondary">
+                  카테고리 선택
+                </Typography>
+                <Stack direction="row" spacing={0.5}>
+                  <Chip
+                    label="전체"
+                    size="small"
+                    variant="outlined"
+                    onClick={() => handleToggleAll(true)}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip
+                    label="해제"
+                    size="small"
+                    variant="outlined"
+                    onClick={() => handleToggleAll(false)}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                </Stack>
+              </Stack>
+              <Box sx={{ maxHeight: 350, overflow: 'auto' }}>
+                {categoryList.map((cat) => (
+                  <FormControlLabel
+                    key={cat.id}
+                    control={
+                      <Checkbox
+                        checked={cat.enabled}
+                        onChange={() => handleCategoryToggle(cat.id)}
+                        size="small"
+                        sx={{
+                          color: cat.color,
+                          '&.Mui-checked': { color: cat.color },
+                        }}
+                      />
+                    }
+                    label={
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '2px',
+                            bgcolor: cat.color,
+                          }}
+                        />
+                        <Typography variant="body2">
+                          {cat.name}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {(cat.total / 10000).toFixed(0)}만
+                        </Typography>
+                      </Stack>
+                    }
+                    sx={{ display: 'flex', width: '100%', m: 0, py: 0.5 }}
+                  />
+                ))}
+              </Box>
+
+              {/* 선택된 카테고리 총합 */}
+              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="body2" color="textSecondary">
+                  선택된 카테고리 합계
+                </Typography>
+                <Typography variant="h5" fontWeight={600} color="primary.main">
+                  {(categoryList.filter(c => c.enabled).reduce((sum, c) => sum + c.total, 0) / 10000).toFixed(0)}만원
+                </Typography>
+              </Box>
+            </Box>
+          </Stack>
+        ) : (
+          <Typography color="textSecondary" textAlign="center" py={4}>
+            해당 기간의 지출 데이터가 없습니다.
+          </Typography>
+        )}
       </DashboardCard>
     </Box>
   )

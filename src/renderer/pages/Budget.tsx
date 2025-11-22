@@ -326,7 +326,9 @@ export default function Budget() {
   }
 
   const isConfirmed = monthlyBudgets.length > 0 && monthlyBudgets.every((b) => b.is_confirmed)
-  const totalBudget = monthlyBudgets.reduce((sum, b) => sum + b.amount, 0)
+  const totalBudget = monthlyBudgets.reduce((sum, b) => {
+    return sum + (b.currency === 'AED' ? b.amount * exchangeRate : b.amount)
+  }, 0)
 
   if (loading) {
     return (

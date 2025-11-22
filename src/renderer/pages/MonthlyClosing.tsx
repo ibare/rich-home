@@ -81,11 +81,28 @@ export default function MonthlyClosing() {
   // 월별 데이터 존재 여부
   const [monthsWithData, setMonthsWithData] = useState<Set<number>>(new Set())
 
+  // 환율
+  const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
+
   useEffect(() => {
     setPageTitle('월 마감')
     setOnAdd(null)
+    loadExchangeRate()
     return () => setOnAdd(null)
   }, [setPageTitle, setOnAdd])
+
+  const loadExchangeRate = async () => {
+    try {
+      const result = await window.electronAPI.db.get(
+        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+      ) as { value: string } | undefined
+      if (result) {
+        setExchangeRate(parseFloat(result.value))
+      }
+    } catch (error) {
+      console.error('Failed to load exchange rate:', error)
+    }
+  }
 
   useEffect(() => {
     loadMonthsWithData()
@@ -128,39 +145,56 @@ export default function MonthlyClosing() {
         ? `${selectedYear + 1}-01-01`
         : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      // 카테고리별 합계 (통계 포함 거래만)
-      const categoryData = await window.electronAPI.db.query(`
+      // 카테고리별 합계 (통계 포함 거래만, 통화 포함)
+      const rawCategoryData = await window.electronAPI.db.query(`
         SELECT
           c.id,
           c.name,
           t.type,
+          t.currency,
           SUM(t.amount) as amount
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
         WHERE t.date >= ? AND t.date < ? AND t.include_in_stats = 1
-        GROUP BY c.id, t.type
+        GROUP BY c.id, t.type, t.currency
         ORDER BY t.type, amount DESC
-      `, [startDate, endDate]) as { id: string; name: string; type: 'income' | 'expense'; amount: number }[]
+      `, [startDate, endDate]) as { id: string; name: string; type: 'income' | 'expense'; currency: string; amount: number }[]
 
-      // 예산 데이터 조회
+      // 통화별 합계를 KRW로 변환하여 카테고리별로 합산
+      const categoryMap = new Map<string, { id: string; name: string; type: 'income' | 'expense'; amount: number }>()
+      rawCategoryData.forEach(c => {
+        const amountInKRW = c.currency === 'AED' ? c.amount * exchangeRate : c.amount
+        const key = `${c.id}-${c.type}`
+        const existing = categoryMap.get(key)
+        if (existing) {
+          existing.amount += amountInKRW
+        } else {
+          categoryMap.set(key, { id: c.id, name: c.name, type: c.type, amount: amountInKRW })
+        }
+      })
+      const categoryData = Array.from(categoryMap.values())
+
+      // 예산 데이터 조회 (통화 포함)
       const budgetData = await window.electronAPI.db.query(`
         SELECT
           mb.amount as budget_amount,
+          bi.currency,
           bic.category_id
         FROM monthly_budgets mb
         JOIN budget_items bi ON mb.budget_item_id = bi.id
         LEFT JOIN budget_item_categories bic ON bi.id = bic.budget_item_id
         WHERE mb.year = ? AND mb.month = ?
-      `, [selectedYear, selectedMonth]) as { budget_amount: number; category_id: string | null }[]
+      `, [selectedYear, selectedMonth]) as { budget_amount: number; currency: string; category_id: string | null }[]
 
-      // 카테고리별 예산 매핑
+      // 카테고리별 예산 매핑 (AED는 KRW로 변환)
       const budgetByCategory = new Map<string, number>()
       let totalBudget = 0
       budgetData.forEach(b => {
+        const amountInKRW = b.currency === 'AED' ? b.budget_amount * exchangeRate : b.budget_amount
         if (b.category_id) {
-          budgetByCategory.set(b.category_id, (budgetByCategory.get(b.category_id) || 0) + b.budget_amount)
+          budgetByCategory.set(b.category_id, (budgetByCategory.get(b.category_id) || 0) + amountInKRW)
         }
-        totalBudget += b.budget_amount
+        totalBudget += amountInKRW
       })
 
       // 카테고리 상세 데이터 구성
