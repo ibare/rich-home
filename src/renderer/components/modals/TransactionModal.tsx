@@ -26,6 +26,8 @@ import {
   Box,
   Divider,
   Autocomplete,
+  FormControlLabel,
+  Switch,
 } from '@mui/material'
 import { IconX, IconPlus, IconTrash } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
@@ -54,6 +56,7 @@ interface PendingTransaction {
   category_name: string
   date: string
   description: string
+  include_in_stats: boolean
 }
 
 // 해당 월의 마지막 날 계산
@@ -81,6 +84,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     category_id: '',
     date: getInitialDate(),
     description: '',
+    include_in_stats: true,
   })
   const [saving, setSaving] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
@@ -211,6 +215,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
       category_name: category?.name || '',
       date: formData.date,
       description: formData.description,
+      include_in_stats: formData.include_in_stats,
     }
 
     setPendingList((prev) => [...prev, newTransaction])
@@ -244,9 +249,9 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     try {
       for (const tx of pendingList) {
         await window.electronAPI.db.query(
-          `INSERT INTO transactions (id, type, amount, currency, category_id, date, description)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [tx.id, tx.type, tx.amount, tx.currency, tx.category_id, tx.date, tx.description || null]
+          `INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tx.id, tx.type, tx.amount, tx.currency, tx.category_id, tx.date, tx.description || null, tx.include_in_stats ? 1 : 0]
         )
       }
 
@@ -270,6 +275,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
       category_id: '',
       date: new Date().toISOString().slice(0, 10),
       description: '',
+      include_in_stats: true,
     })
   }
 
@@ -318,7 +324,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
         {/* 입력 폼 */}
         <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 2, mb: 2 }}>
           <Stack spacing={2}>
-            {/* 첫 번째 줄: 날짜, 수입/지출 */}
+            {/* 첫 번째 줄: 날짜, 수입/지출, 통계 포함 */}
             <Stack direction="row" spacing={2} alignItems="center">
               {/* 날짜 */}
               <TextField
@@ -343,6 +349,21 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
                   수입
                 </ToggleButton>
               </ToggleButtonGroup>
+
+              <Box sx={{ flex: 1 }} />
+
+              {/* 통계 포함 여부 */}
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.include_in_stats}
+                    onChange={(e) => setFormData(prev => ({ ...prev, include_in_stats: e.target.checked }))}
+                    size="small"
+                  />
+                }
+                label="통계 포함"
+                sx={{ mr: 0 }}
+              />
             </Stack>
 
             {/* 두 번째 줄: 통화, 카테고리, 금액, 내용, 추가 버튼 */}

@@ -43,6 +43,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
+    "@mui/x-data-grid": "^8.19.0",
     "@mui/x-date-pickers": "^8.19.0",
     "@tabler/icons-react": "^3.35.0",
     "better-sqlite3": "^12.4.5",

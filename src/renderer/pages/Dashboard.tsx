@@ -157,10 +157,10 @@ export default function Dashboard() {
         }
       }
 
-      // 이번 달 수입/지출
+      // 이번 달 수입/지출 (통계 포함 거래만)
       const monthlyTransactions = (await window.electronAPI.db.query(`
         SELECT type, amount, currency FROM transactions
-        WHERE date >= ? AND date < ?
+        WHERE date >= ? AND date < ? AND include_in_stats = 1
       `, [startDate, endDate])) as { type: string; amount: number; currency: string }[]
 
       let monthlyIncome = 0
@@ -200,13 +200,13 @@ export default function Dashboard() {
         LIMIT 10
       `)) as Transaction[]
 
-      // 카테고리별 지출 (이번 달)
+      // 카테고리별 지출 (이번 달, 통계 포함 거래만)
       const categoryExpenses = (await window.electronAPI.db.query(`
         SELECT t.category_id, c.name as category_name, c.color,
                SUM(CASE WHEN t.currency = 'AED' THEN t.amount * ? ELSE t.amount END) as total
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
-        WHERE t.type = 'expense' AND t.date >= ? AND t.date < ?
+        WHERE t.type = 'expense' AND t.date >= ? AND t.date < ? AND t.include_in_stats = 1
         GROUP BY t.category_id
         ORDER BY total DESC
         LIMIT 5

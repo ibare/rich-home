@@ -66,7 +66,7 @@ export default function Statistics() {
         ? parseFloat(exchangeRateSetting[0].value)
         : 370
 
-      // 월별 수입/지출 집계
+      // 월별 수입/지출 집계 (통계 포함 거래만)
       const result = await window.electronAPI.db.query(`
         SELECT
           strftime('%Y', date) as year,
@@ -76,6 +76,7 @@ export default function Statistics() {
           SUM(amount) as total
         FROM transactions
         WHERE strftime('%Y', date) = ?
+          AND include_in_stats = 1
         GROUP BY year, month, type, currency
         ORDER BY year, month
       `, [String(selectedYear)]) as {
@@ -470,7 +471,7 @@ export default function Statistics() {
                     <Box
                       sx={{
                         width: '70%',
-                        height: `${Math.min((data.income / Math.max(...monthlyData.map(d => d.income), 1)) * 50, 50)}px`,
+                        height: `${Math.min((data.income / Math.max(...monthlyData.map(d => Math.max(d.income, d.expense)), 1)) * 50, 50)}px`,
                         bgcolor: colors.income,
                         borderRadius: '4px 4px 0 0',
                         minHeight: hasData && data.income > 0 ? 4 : 0,
@@ -492,7 +493,7 @@ export default function Statistics() {
                     <Box
                       sx={{
                         width: '70%',
-                        height: `${Math.min((data.expense / Math.max(...monthlyData.map(d => d.expense), 1)) * 50, 50)}px`,
+                        height: `${Math.min((data.expense / Math.max(...monthlyData.map(d => Math.max(d.income, d.expense)), 1)) * 50, 50)}px`,
                         bgcolor: colors.expense,
                         borderRadius: '0 0 4px 4px',
                         minHeight: hasData && data.expense > 0 ? 4 : 0,

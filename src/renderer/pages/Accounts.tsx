@@ -7,8 +7,14 @@ import {
   Card,
   CardContent,
   Chip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material'
-import { IconWallet } from '@tabler/icons-react'
+import { IconWallet, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AccountModal from '../components/modals/AccountModal'
 import AmountText from '../components/shared/AmountText'
@@ -45,6 +51,8 @@ export default function Accounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
 
   useEffect(() => {
     setPageTitle('계좌 관리')
@@ -73,6 +81,36 @@ export default function Accounts() {
       console.error('Failed to load accounts:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, account: Account) => {
+    e.stopPropagation()
+    setDeletingAccount(account)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!deletingAccount) return
+
+    try {
+      // 잔고 데이터 먼저 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM account_balances WHERE account_id = ?',
+        [deletingAccount.id]
+      )
+      // 계좌 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM accounts WHERE id = ?',
+        [deletingAccount.id]
+      )
+
+      setDeleteDialogOpen(false)
+      setDeletingAccount(null)
+      loadAccounts()
+    } catch (error) {
+      console.error('Failed to delete account:', error)
+      alert('계좌 삭제에 실패했습니다.')
     }
   }
 
@@ -157,12 +195,21 @@ export default function Accounts() {
                           </Box>
                         </Stack>
 
-                        <AmountText
-                          amount={account.latest_balance || 0}
-                          currency={account.currency}
-                          variant="h5"
-                          fontWeight={600}
-                        />
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <AmountText
+                            amount={account.latest_balance || 0}
+                            currency={account.currency}
+                            variant="h5"
+                            fontWeight={600}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleDeleteClick(e, account)}
+                            sx={{ color: 'error.main' }}
+                          >
+                            <IconTrash size={18} />
+                          </IconButton>
+                        </Stack>
                       </Stack>
                     </CardContent>
                   </Card>
@@ -172,6 +219,27 @@ export default function Accounts() {
           ))}
         </Stack>
       )}
+
+      {/* 삭제 확인 다이얼로그 */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>계좌 삭제</DialogTitle>
+        <DialogContent>
+          <Typography>
+            <strong>{deletingAccount?.name}</strong> 계좌를 삭제하시겠습니까?
+          </Typography>
+          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+            계좌와 함께 모든 잔고 기록이 삭제됩니다.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} color="inherit">
+            취소
+          </Button>
+          <Button onClick={handleDelete} color="error" variant="contained">
+            삭제
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <AccountModal
         open={modalOpen}

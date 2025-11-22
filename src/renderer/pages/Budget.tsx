@@ -27,6 +27,7 @@ import {
   IconLock,
   IconX,
   IconEdit,
+  IconTrash,
 } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
@@ -70,6 +71,9 @@ export default function Budget() {
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<BudgetItem | null>(null)
+  const [deleteItemDialogOpen, setDeleteItemDialogOpen] = useState(false)
+  const [deletingItem, setDeletingItem] = useState<BudgetItem | null>(null)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingBudget, setEditingBudget] = useState<MonthlyBudget | null>(null)
   const [editAmount, setEditAmount] = useState('')
@@ -81,15 +85,32 @@ export default function Budget() {
   // 월별 데이터 존재 여부
   const [monthsWithData, setMonthsWithData] = useState<Set<number>>(new Set())
 
+  // 환율
+  const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
+
   useEffect(() => {
     setPageTitle('예산 관리')
     setOnAdd(() => setModalOpen(true))
+    loadExchangeRate()
     return () => setOnAdd(null)
   }, [setPageTitle, setOnAdd])
 
   useEffect(() => {
     loadMonthsWithData()
   }, [selectedYear])
+
+  const loadExchangeRate = async () => {
+    try {
+      const result = await window.electronAPI.db.get(
+        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+      ) as { value: string } | undefined
+      if (result) {
+        setExchangeRate(parseFloat(result.value))
+      }
+    } catch (error) {
+      console.error('Failed to load exchange rate:', error)
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -245,7 +266,7 @@ export default function Budget() {
 
     try {
       await window.electronAPI.db.query(
-        'UPDATE monthly_budgets SET amount = ?, updated_at = datetime("now") WHERE id = ?',
+        'UPDATE monthly_budgets SET amount = ?, updated_at = datetime(\'now\') WHERE id = ?',
         [amount, editingBudget.id]
       )
       setEditModalOpen(false)
@@ -255,6 +276,53 @@ export default function Budget() {
       console.error('Failed to update budget:', error)
       alert('금액 수정에 실패했습니다.')
     }
+  }
+
+  // 예산 항목 수정 클릭
+  const handleEditItemClick = (item: BudgetItem) => {
+    setEditingItem(item)
+    setModalOpen(true)
+  }
+
+  // 예산 항목 삭제 클릭
+  const handleDeleteItemClick = (item: BudgetItem) => {
+    setDeletingItem(item)
+    setDeleteItemDialogOpen(true)
+  }
+
+  // 예산 항목 삭제 실행
+  const handleDeleteItem = async () => {
+    if (!deletingItem) return
+
+    try {
+      // 카테고리 매핑 먼저 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM budget_item_categories WHERE budget_item_id = ?',
+        [deletingItem.id]
+      )
+      // 월별 예산에서도 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM monthly_budgets WHERE budget_item_id = ?',
+        [deletingItem.id]
+      )
+      // 예산 항목 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM budget_items WHERE id = ?',
+        [deletingItem.id]
+      )
+
+      setDeleteItemDialogOpen(false)
+      setDeletingItem(null)
+      loadData()
+    } catch (error) {
+      console.error('Failed to delete budget item:', error)
+      alert('예산 항목 삭제에 실패했습니다.')
+    }
+  }
+
+  const handleModalClose = () => {
+    setModalOpen(false)
+    setEditingItem(null)
   }
 
   const isConfirmed = monthlyBudgets.length > 0 && monthlyBudgets.every((b) => b.is_confirmed)
@@ -394,6 +462,29 @@ export default function Budget() {
 
       {tab === 1 && (
         <>
+          {/* 템플릿 월 예산 합계 */}
+          {budgetItems.length > 0 && (() => {
+            const totalKRW = budgetItems.reduce((sum, item) => {
+              const monthlyAmount = getMonthlyAmount(item)
+              return sum + (item.currency === 'AED' ? monthlyAmount * exchangeRate : monthlyAmount)
+            }, 0)
+            return (
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    월 예산 합계 (템플릿 기준)
+                  </Typography>
+                  <AmountText
+                    amount={totalKRW}
+                    currency="KRW"
+                    variant="h3"
+                    fontWeight={600}
+                  />
+                </CardContent>
+              </Card>
+            )
+          })()}
+
           {/* 예산 항목 템플릿 목록 */}
           {budgetItems.length === 0 ? (
             <Card>
@@ -414,6 +505,7 @@ export default function Budget() {
                       <TableCell>연결 카테고리</TableCell>
                       <TableCell align="right">기준 금액</TableCell>
                       <TableCell align="right">월 분배액</TableCell>
+                      <TableCell align="center" width={80}></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -449,6 +541,20 @@ export default function Budget() {
                             fontWeight={600}
                           />
                         </TableCell>
+                        <TableCell align="center">
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <IconButton size="small" onClick={() => handleEditItemClick(item)}>
+                              <IconEdit size={16} />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteItemClick(item)}
+                              sx={{ color: 'error.main' }}
+                            >
+                              <IconTrash size={16} />
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -461,9 +567,31 @@ export default function Budget() {
 
       <BudgetItemModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={handleModalClose}
         onSaved={loadData}
+        editItem={editingItem}
       />
+
+      {/* 예산 항목 삭제 확인 다이얼로그 */}
+      <Dialog open={deleteItemDialogOpen} onClose={() => setDeleteItemDialogOpen(false)}>
+        <DialogTitle>예산 항목 삭제</DialogTitle>
+        <DialogContent>
+          <Typography>
+            <strong>{deletingItem?.name}</strong> 항목을 삭제하시겠습니까?
+          </Typography>
+          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+            해당 항목의 모든 월별 예산 데이터도 함께 삭제됩니다.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteItemDialogOpen(false)} color="inherit">
+            취소
+          </Button>
+          <Button onClick={handleDeleteItem} color="error" variant="contained">
+            삭제
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 금액 수정 모달 */}
       <Dialog open={editModalOpen} onClose={() => setEditModalOpen(false)} maxWidth="xs" fullWidth>

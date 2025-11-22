@@ -13,6 +13,7 @@ import {
   DialogActions,
   Button,
 } from '@mui/material'
+import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import { IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import TransactionModal from '../components/modals/TransactionModal'
@@ -29,6 +30,7 @@ interface Transaction {
   date: string
   description: string | null
   memo: string | null
+  include_in_stats: number
 }
 
 export default function Transactions() {
@@ -126,30 +128,103 @@ export default function Transactions() {
     })
   }
 
-  // 합계 계산
+  // 합계 계산 (통계 포함 거래만)
   const totalIncome = transactions
-    .filter((t) => t.type === 'income')
+    .filter((t) => t.type === 'income' && t.include_in_stats === 1)
     .reduce((sum, t) => sum + t.amount, 0)
   const totalExpense = transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => t.type === 'expense' && t.include_in_stats === 1)
     .reduce((sum, t) => sum + t.amount, 0)
-
-  // 날짜별 그룹핑
-  const groupedTransactions = transactions.reduce(
-    (acc, tx) => {
-      if (!acc[tx.date]) {
-        acc[tx.date] = []
-      }
-      acc[tx.date].push(tx)
-      return acc
-    },
-    {} as Record<string, Transaction[]>
-  )
 
   const handleSaved = () => {
     loadTransactions()
     loadMonthsWithData()
   }
+
+  // DataGrid 컬럼 정의
+  const columns: GridColDef[] = [
+    {
+      field: 'date',
+      headerName: '날짜',
+      width: 120,
+      renderCell: (params: GridRenderCellParams<Transaction>) => formatDate(params.value),
+    },
+    {
+      field: 'type',
+      headerName: '구분',
+      width: 80,
+      renderCell: (params: GridRenderCellParams<Transaction>) => (
+        <Chip
+          label={params.value === 'expense' ? '지출' : '수입'}
+          size="small"
+          color={params.value === 'expense' ? 'error' : 'success'}
+          sx={{ '& .MuiChip-label': { fontSize: '0.95em' }, height: 26, minWidth: 50 }}
+        />
+      ),
+    },
+    {
+      field: 'description',
+      headerName: '내용',
+      flex: 1,
+      minWidth: 150,
+      renderCell: (params: GridRenderCellParams<Transaction>) => (
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="body2">
+            {params.value || params.row.category_name}
+          </Typography>
+          {params.row.include_in_stats === 0 && (
+            <Chip
+              label="통계 제외"
+              size="small"
+              variant="outlined"
+              sx={{ height: 20, fontSize: '0.7rem' }}
+            />
+          )}
+        </Stack>
+      ),
+    },
+    {
+      field: 'category_name',
+      headerName: '카테고리',
+      width: 130,
+    },
+    {
+      field: 'amount',
+      headerName: '금액',
+      width: 150,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params: GridRenderCellParams<Transaction>) => (
+        <AmountText
+          amount={params.value}
+          currency={params.row.currency}
+          variant="body2"
+          fontWeight={600}
+          color={params.row.type === 'expense' ? 'error.main' : 'success.main'}
+          showSign
+          signType={params.row.type}
+        />
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 50,
+      sortable: false,
+      renderCell: (params: GridRenderCellParams<Transaction>) => (
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation()
+            setDeletingId(params.row.id)
+            setDeleteConfirmOpen(true)
+          }}
+        >
+          <IconTrash size={16} />
+        </IconButton>
+      ),
+    },
+  ]
 
   return (
     <Box>
@@ -213,80 +288,40 @@ export default function Transactions() {
         </Card>
       </Stack>
 
-      {/* 거래 목록 */}
-      {loading ? (
-        <Box>
-          <Typography>로딩 중...</Typography>
-        </Box>
-      ) : transactions.length === 0 ? (
-        <Card>
-          <CardContent>
-            <Typography color="textSecondary" textAlign="center" py={4}>
-              이번 달 거래 내역이 없습니다.
-            </Typography>
-          </CardContent>
-        </Card>
-      ) : (
-        <Stack spacing={2}>
-          {Object.entries(groupedTransactions).map(([date, txList]) => (
-            <Card key={date}>
-              <CardContent sx={{ pb: 1 }}>
-                <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
-                  {formatDate(date)}
-                </Typography>
-                <Stack spacing={1} divider={<Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }} />}>
-                  {txList.map((tx) => (
-                    <Stack
-                      key={tx.id}
-                      direction="row"
-                      justifyContent="space-between"
-                      alignItems="center"
-                      sx={{ py: 1 }}
-                    >
-                      <Stack direction="row" spacing={2} alignItems="center">
-                        <Chip
-                          label={tx.type === 'expense' ? '지출' : '수입'}
-                          size="small"
-                          color={tx.type === 'expense' ? 'error' : 'success'}
-                          sx={{ minWidth: 50 }}
-                        />
-                        <Box>
-                          <Typography fontWeight={500}>
-                            {tx.description || tx.category_name}
-                          </Typography>
-                          <Typography variant="body2" color="textSecondary">
-                            {tx.category_name}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <AmountText
-                          amount={tx.amount}
-                          currency={tx.currency}
-                          variant="h6"
-                          fontWeight={600}
-                          color={tx.type === 'expense' ? 'error.main' : 'success.main'}
-                          showSign
-                          signType={tx.type}
-                        />
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setDeletingId(tx.id)
-                            setDeleteConfirmOpen(true)
-                          }}
-                        >
-                          <IconTrash size={16} />
-                        </IconButton>
-                      </Stack>
-                    </Stack>
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
-      )}
+      {/* 거래 목록 DataGrid */}
+      <DataGrid
+        rows={transactions}
+        columns={columns}
+        loading={loading}
+        disableRowSelectionOnClick
+        hideFooter
+        initialState={{
+          sorting: { sortModel: [{ field: 'date', sort: 'desc' }] },
+        }}
+        getRowClassName={(params) =>
+          params.row.include_in_stats === 0 ? 'row-excluded' : ''
+        }
+        sx={{
+          '& .MuiDataGrid-cell': {
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+          },
+          '& .row-excluded': {
+            opacity: 0.6,
+          },
+          '& .MuiDataGrid-columnHeaders': {
+            bgcolor: 'background.default',
+            borderBottom: '2px solid',
+            borderColor: 'divider',
+          },
+        }}
+        localeText={{
+          noRowsLabel: '이번 달 거래 내역이 없습니다.',
+        }}
+        autoHeight
+      />
 
       <TransactionModal
         open={modalOpen}

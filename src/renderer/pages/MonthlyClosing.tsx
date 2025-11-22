@@ -128,7 +128,7 @@ export default function MonthlyClosing() {
         ? `${selectedYear + 1}-01-01`
         : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      // 카테고리별 합계
+      // 카테고리별 합계 (통계 포함 거래만)
       const categoryData = await window.electronAPI.db.query(`
         SELECT
           c.id,
@@ -137,7 +137,7 @@ export default function MonthlyClosing() {
           SUM(t.amount) as amount
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
-        WHERE t.date >= ? AND t.date < ?
+        WHERE t.date >= ? AND t.date < ? AND t.include_in_stats = 1
         GROUP BY c.id, t.type
         ORDER BY t.type, amount DESC
       `, [startDate, endDate]) as { id: string; name: string; type: 'income' | 'expense'; amount: number }[]
