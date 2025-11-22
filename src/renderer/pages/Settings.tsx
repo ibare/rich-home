@@ -7,16 +7,44 @@ import {
   Grid,
   TextField,
   InputAdornment,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControlLabel,
+  Checkbox,
+  Alert,
 } from '@mui/material'
-import { IconDownload, IconUpload, IconCheck } from '@tabler/icons-react'
+import {
+  IconDownload,
+  IconUpload,
+  IconCheck,
+  IconFolder,
+  IconRefresh,
+  IconDatabase,
+} from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
+
+interface DbPathInfo {
+  currentPath: string
+  defaultPath: string
+  isCustom: boolean
+}
 
 export default function Settings() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [exchangeRate, setExchangeRate] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // DB 경로 관련 상태
+  const [dbPathInfo, setDbPathInfo] = useState<DbPathInfo | null>(null)
+  const [changePathDialogOpen, setChangePathDialogOpen] = useState(false)
+  const [selectedPath, setSelectedPath] = useState('')
+  const [copyExisting, setCopyExisting] = useState(true)
+  const [changingPath, setChangingPath] = useState(false)
 
   useEffect(() => {
     setPageTitle('설정')
@@ -26,6 +54,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadSettings()
+    loadDbPath()
   }, [])
 
   const loadSettings = async () => {
@@ -41,6 +70,15 @@ export default function Settings() {
     } catch (error) {
       console.error('Failed to load settings:', error)
       setExchangeRate('385')
+    }
+  }
+
+  const loadDbPath = async () => {
+    try {
+      const pathInfo = await window.electronAPI.db.getPath()
+      setDbPathInfo(pathInfo)
+    } catch (error) {
+      console.error('Failed to load DB path:', error)
     }
   }
 
@@ -84,9 +122,118 @@ export default function Settings() {
     }
   }
 
+  const handleSelectFolder = async () => {
+    const result = await window.electronAPI.db.selectFolder()
+    if (!result.canceled && result.path) {
+      setSelectedPath(result.path)
+      setChangePathDialogOpen(true)
+    }
+  }
+
+  const handleChangePath = async () => {
+    if (!selectedPath) return
+
+    setChangingPath(true)
+    try {
+      const result = await window.electronAPI.db.changePath(selectedPath, copyExisting)
+      if (result.success) {
+        setChangePathDialogOpen(false)
+        // 앱 재시작 안내
+        if (confirm('데이터베이스 경로가 변경되었습니다. 앱을 재시작하시겠습니까?')) {
+          await window.electronAPI.app.restart()
+        } else {
+          loadDbPath()
+        }
+      } else {
+        alert(result.error || '경로 변경에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('Failed to change DB path:', error)
+      alert('경로 변경에 실패했습니다.')
+    } finally {
+      setChangingPath(false)
+    }
+  }
+
+  const handleResetPath = async () => {
+    if (!confirm('데이터베이스를 기본 위치로 되돌리시겠습니까?')) return
+
+    try {
+      const result = await window.electronAPI.db.resetPath()
+      if (result.success) {
+        if (confirm('기본 위치로 변경되었습니다. 앱을 재시작하시겠습니까?')) {
+          await window.electronAPI.app.restart()
+        } else {
+          loadDbPath()
+        }
+      } else {
+        alert(result.error || '경로 초기화에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('Failed to reset DB path:', error)
+      alert('경로 초기화에 실패했습니다.')
+    }
+  }
+
   return (
     <Box>
       <Grid container spacing={3}>
+        {/* 데이터베이스 저장 위치 */}
+        <Grid size={{ xs: 12 }}>
+          <DashboardCard title="데이터베이스 저장 위치">
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <IconDatabase size={20} />
+                <Typography variant="body2" color="textSecondary">
+                  현재 경로:
+                </Typography>
+                {dbPathInfo?.isCustom && (
+                  <Chip label="사용자 지정" size="small" color="primary" />
+                )}
+              </Stack>
+
+              <Box
+                sx={{
+                  p: 1.5,
+                  bgcolor: 'grey.100',
+                  borderRadius: 1,
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {dbPathInfo?.currentPath || '로딩 중...'}
+              </Box>
+
+              <Stack direction="row" spacing={2}>
+                <Button
+                  variant="outlined"
+                  startIcon={<IconFolder size={18} />}
+                  onClick={handleSelectFolder}
+                >
+                  위치 변경
+                </Button>
+                {dbPathInfo?.isCustom && (
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<IconRefresh size={18} />}
+                    onClick={handleResetPath}
+                  >
+                    기본 위치로 복원
+                  </Button>
+                )}
+              </Stack>
+
+              {dbPathInfo?.isCustom && (
+                <Typography variant="caption" color="textSecondary">
+                  기본 경로: {dbPathInfo.defaultPath}
+                </Typography>
+              )}
+            </Stack>
+          </DashboardCard>
+        </Grid>
+
         <Grid size={{ xs: 12, md: 6 }}>
           <DashboardCard title="환율 설정">
             <Stack spacing={2}>
@@ -144,6 +291,61 @@ export default function Settings() {
           </DashboardCard>
         </Grid>
       </Grid>
+
+      {/* 경로 변경 다이얼로그 */}
+      <Dialog
+        open={changePathDialogOpen}
+        onClose={() => setChangePathDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>데이터베이스 위치 변경</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="textSecondary">
+              새 위치:
+            </Typography>
+            <Box
+              sx={{
+                p: 1.5,
+                bgcolor: 'grey.100',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                wordBreak: 'break-all',
+              }}
+            >
+              {selectedPath}/rich-home.db
+            </Box>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={copyExisting}
+                  onChange={(e) => setCopyExisting(e.target.checked)}
+                />
+              }
+              label="기존 데이터를 새 위치로 복사"
+            />
+
+            <Alert severity="warning">
+              경로 변경 후 앱이 재시작됩니다.
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setChangePathDialogOpen(false)} color="inherit">
+            취소
+          </Button>
+          <Button
+            onClick={handleChangePath}
+            variant="contained"
+            disabled={changingPath}
+          >
+            {changingPath ? '변경 중...' : '위치 변경'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

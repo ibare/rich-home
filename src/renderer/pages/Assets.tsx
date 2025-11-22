@@ -10,6 +10,7 @@ import {
 import { IconHome, IconChartLine } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AssetModal from '../components/modals/AssetModal'
+import AmountText from '../components/shared/AmountText'
 
 interface Asset {
   id: string
@@ -86,10 +87,6 @@ export default function Assets() {
     }
   }
 
-  const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`
-  }
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('ko-KR', {
@@ -148,21 +145,23 @@ export default function Assets() {
                 <Typography variant="body2" color="textSecondary" gutterBottom>
                   순자산 (자산 - 부채)
                 </Typography>
-                <Typography
+                <AmountText
+                  amount={netWorth}
+                  currency="KRW"
                   variant="h3"
                   fontWeight={600}
                   color={netWorth >= 0 ? 'success.main' : 'error.main'}
-                >
-                  KRW {netWorth.toLocaleString()}
-                </Typography>
+                />
               </Box>
               <Stack spacing={0.5} alignItems="flex-end">
-                <Typography variant="body2" color="textSecondary">
-                  총 자산: KRW {totalAssets.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="error.main">
-                  총 부채: KRW {totalLiabilities.toLocaleString()}
-                </Typography>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Typography variant="body2" color="textSecondary">총 자산:</Typography>
+                  <AmountText amount={totalAssets} currency="KRW" variant="body2" />
+                </Stack>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Typography variant="body2" color="error.main">총 부채:</Typography>
+                  <AmountText amount={totalLiabilities} currency="KRW" variant="body2" color="error.main" />
+                </Stack>
                 <Typography variant="caption" color="textSecondary">
                   환율: 1 AED = {exchangeRate.toLocaleString()} KRW
                 </Typography>
@@ -178,9 +177,7 @@ export default function Assets() {
                 <Typography variant="h6" fontWeight={600}>
                   부동산
                 </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  KRW {totalRealEstate.toLocaleString()}
-                </Typography>
+                <AmountText amount={totalRealEstate} currency="KRW" variant="body2" color="textSecondary" />
               </Stack>
               <Stack spacing={2}>
                 {realEstateAssets.map((asset) => (
@@ -219,9 +216,12 @@ export default function Assets() {
                           </Box>
                         </Stack>
 
-                        <Typography variant="h5" fontWeight={600}>
-                          {formatCurrency(asset.purchase_amount, asset.currency)}
-                        </Typography>
+                        <AmountText
+                          amount={asset.purchase_amount}
+                          currency={asset.currency}
+                          variant="h5"
+                          fontWeight={600}
+                        />
                       </Stack>
                     </CardContent>
                   </Card>
@@ -237,9 +237,7 @@ export default function Assets() {
                 <Typography variant="h6" fontWeight={600}>
                   주식
                 </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  KRW {totalStock.toLocaleString()}
-                </Typography>
+                <AmountText amount={totalStock} currency="KRW" variant="body2" color="textSecondary" />
               </Stack>
               <Stack spacing={2}>
                 {stockAssets.map((asset) => (
@@ -283,12 +281,21 @@ export default function Assets() {
                         </Stack>
 
                         <Box textAlign="right">
-                          <Typography variant="h5" fontWeight={600}>
-                            {formatCurrency(asset.purchase_amount * asset.quantity, asset.currency)}
-                          </Typography>
-                          <Typography variant="body2" color="textSecondary">
-                            @{formatCurrency(asset.purchase_amount, asset.currency)}
-                          </Typography>
+                          <AmountText
+                            amount={asset.purchase_amount * asset.quantity}
+                            currency={asset.currency}
+                            variant="h5"
+                            fontWeight={600}
+                          />
+                          <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                            <Typography variant="body2" color="textSecondary">@</Typography>
+                            <AmountText
+                              amount={asset.purchase_amount}
+                              currency={asset.currency}
+                              variant="body2"
+                              color="textSecondary"
+                            />
+                          </Stack>
                         </Box>
                       </Stack>
                     </CardContent>

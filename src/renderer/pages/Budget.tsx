@@ -33,6 +33,7 @@ import {
 } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
+import AmountText from '../components/shared/AmountText'
 
 interface BudgetItem {
   id: string
@@ -118,10 +119,6 @@ export default function Budget() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`
   }
 
   const getMonthlyAmount = (item: BudgetItem) => {
@@ -360,9 +357,12 @@ export default function Budget() {
                 <Typography variant="body2" color="textSecondary" gutterBottom>
                   총 예산
                 </Typography>
-                <Typography variant="h3" fontWeight={600}>
-                  KRW {totalBudget.toLocaleString()}
-                </Typography>
+                <AmountText
+                  amount={totalBudget}
+                  currency="KRW"
+                  variant="h3"
+                  fontWeight={600}
+                />
               </CardContent>
             </Card>
           )}
@@ -402,9 +402,11 @@ export default function Budget() {
                           />
                         </TableCell>
                         <TableCell align="right">
-                          <Typography fontWeight={600}>
-                            {formatCurrency(budget.amount, budget.currency || 'KRW')}
-                          </Typography>
+                          <AmountText
+                            amount={budget.amount}
+                            currency={budget.currency || 'KRW'}
+                            fontWeight={600}
+                          />
                         </TableCell>
                         <TableCell align="center">
                           {!isConfirmed && (
@@ -474,12 +476,14 @@ export default function Budget() {
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          {formatCurrency(item.base_amount, item.currency)}
+                          <AmountText amount={item.base_amount} currency={item.currency} />
                         </TableCell>
                         <TableCell align="right">
-                          <Typography fontWeight={600}>
-                            {formatCurrency(getMonthlyAmount(item), item.currency)}
-                          </Typography>
+                          <AmountText
+                            amount={getMonthlyAmount(item)}
+                            currency={item.currency}
+                            fontWeight={600}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

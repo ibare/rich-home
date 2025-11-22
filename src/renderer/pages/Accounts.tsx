@@ -11,6 +11,7 @@ import {
 import { IconWallet } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AccountModal from '../components/modals/AccountModal'
+import AmountText from '../components/shared/AmountText'
 
 interface Account {
   id: string
@@ -73,10 +74,6 @@ export default function Accounts() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`
   }
 
   const groupedAccounts = accounts.reduce((acc, account) => {
@@ -160,9 +157,12 @@ export default function Accounts() {
                           </Box>
                         </Stack>
 
-                        <Typography variant="h5" fontWeight={600}>
-                          {formatCurrency(account.latest_balance || 0, account.currency)}
-                        </Typography>
+                        <AmountText
+                          amount={account.latest_balance || 0}
+                          currency={account.currency}
+                          variant="h5"
+                          fontWeight={600}
+                        />
                       </Stack>
                     </CardContent>
                   </Card>

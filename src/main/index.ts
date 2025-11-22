@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
-import { initDatabase, getDatabase } from './database'
+import { initDatabase, getDatabase, getCurrentDbPath, getDefaultPath, changeDbPath, resetToDefaultPath } from './database'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -55,7 +55,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-// IPC Handlers
+// IPC Handlers - Database queries
 ipcMain.handle('db:query', async (_event, sql: string, params?: unknown[]) => {
   const db = getDatabase()
   try {
@@ -80,4 +80,41 @@ ipcMain.handle('db:get', async (_event, sql: string, params?: unknown[]) => {
     console.error('Database error:', error)
     throw error
   }
+})
+
+// IPC Handlers - Database path management
+ipcMain.handle('db:getPath', async () => {
+  return {
+    currentPath: getCurrentDbPath(),
+    defaultPath: getDefaultPath(),
+    isCustom: getCurrentDbPath() !== getDefaultPath(),
+  }
+})
+
+ipcMain.handle('db:selectFolder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: '데이터베이스 저장 위치 선택',
+    buttonLabel: '선택',
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true }
+  }
+
+  return { canceled: false, path: result.filePaths[0] }
+})
+
+ipcMain.handle('db:changePath', async (_event, newPath: string, copyExisting: boolean) => {
+  return changeDbPath(newPath, copyExisting)
+})
+
+ipcMain.handle('db:resetPath', async () => {
+  return resetToDefaultPath()
+})
+
+// IPC Handler - App restart
+ipcMain.handle('app:restart', async () => {
+  app.relaunch()
+  app.exit(0)
 })

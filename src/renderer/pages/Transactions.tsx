@@ -30,6 +30,7 @@ import {
 } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import TransactionModal from '../components/modals/TransactionModal'
+import AmountText from '../components/shared/AmountText'
 
 interface Transaction {
   id: string
@@ -111,10 +112,6 @@ export default function Transactions() {
       console.error('Failed to delete transaction:', error)
       alert('삭제에 실패했습니다.')
     }
-  }
-
-  const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`
   }
 
   const formatDate = (dateStr: string) => {
@@ -213,9 +210,15 @@ export default function Transactions() {
             <Typography variant="body2" color="textSecondary" gutterBottom>
               수입
             </Typography>
-            <Typography variant="h5" fontWeight={600} color="success.main">
-              +KRW {totalIncome.toLocaleString()}
-            </Typography>
+            <AmountText
+              amount={totalIncome}
+              currency="KRW"
+              variant="h5"
+              fontWeight={600}
+              color="success.main"
+              showSign
+              signType="income"
+            />
           </CardContent>
         </Card>
         <Card sx={{ flex: 1 }}>
@@ -223,9 +226,15 @@ export default function Transactions() {
             <Typography variant="body2" color="textSecondary" gutterBottom>
               지출
             </Typography>
-            <Typography variant="h5" fontWeight={600} color="error.main">
-              -KRW {totalExpense.toLocaleString()}
-            </Typography>
+            <AmountText
+              amount={totalExpense}
+              currency="KRW"
+              variant="h5"
+              fontWeight={600}
+              color="error.main"
+              showSign
+              signType="expense"
+            />
           </CardContent>
         </Card>
         <Card sx={{ flex: 1 }}>
@@ -233,14 +242,15 @@ export default function Transactions() {
             <Typography variant="body2" color="textSecondary" gutterBottom>
               합계
             </Typography>
-            <Typography
+            <AmountText
+              amount={totalIncome - totalExpense}
+              currency="KRW"
               variant="h5"
               fontWeight={600}
               color={totalIncome - totalExpense >= 0 ? 'success.main' : 'error.main'}
-            >
-              {totalIncome - totalExpense >= 0 ? '+' : ''}
-              KRW {(totalIncome - totalExpense).toLocaleString()}
-            </Typography>
+              showSign
+              signType="auto"
+            />
           </CardContent>
         </Card>
       </Stack>
@@ -288,14 +298,15 @@ export default function Transactions() {
                         </Box>
                       </Stack>
                       <Stack direction="row" alignItems="center" spacing={1}>
-                        <Typography
+                        <AmountText
+                          amount={tx.amount}
+                          currency={tx.currency}
                           variant="h6"
                           fontWeight={600}
                           color={tx.type === 'expense' ? 'error.main' : 'success.main'}
-                        >
-                          {tx.type === 'expense' ? '-' : '+'}
-                          {formatCurrency(tx.amount, tx.currency)}
-                        </Typography>
+                          showSign
+                          signType={tx.type}
+                        />
                         <IconButton
                           size="small"
                           onClick={() => {

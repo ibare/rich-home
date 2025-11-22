@@ -14,10 +14,12 @@ import {
   TableHead,
   TableRow,
   Chip,
+  Button,
 } from '@mui/material'
 import { IconArrowLeft, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import BalanceModal from '../components/modals/BalanceModal'
+import AmountText from '../components/shared/AmountText'
 
 interface Account {
   id: string
@@ -110,10 +112,6 @@ export default function AccountBalanceHistory() {
     }
   }
 
-  const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`
-  }
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('ko-KR', {
@@ -175,9 +173,12 @@ export default function AccountBalanceHistory() {
           <Typography variant="body2" color="textSecondary" gutterBottom>
             현재 잔고
           </Typography>
-          <Typography variant="h3" fontWeight={600}>
-            {formatCurrency(latestBalance, account.currency)}
-          </Typography>
+          <AmountText
+            amount={latestBalance}
+            currency={account.currency}
+            variant="h3"
+            fontWeight={600}
+          />
         </CardContent>
       </Card>
 
@@ -209,18 +210,22 @@ export default function AccountBalanceHistory() {
                       <TableRow key={record.id} hover>
                         <TableCell>{formatDate(record.recorded_at)}</TableCell>
                         <TableCell align="right">
-                          <Typography fontWeight={500}>
-                            {formatCurrency(record.balance, account.currency)}
-                          </Typography>
+                          <AmountText
+                            amount={record.balance}
+                            currency={account.currency}
+                            fontWeight={500}
+                          />
                         </TableCell>
                         <TableCell align="right">
                           {index < balances.length - 1 && (
-                            <Typography
-                              color={diff > 0 ? 'success.main' : diff < 0 ? 'error.main' : 'textSecondary'}
+                            <AmountText
+                              amount={diff}
+                              currency={account.currency}
                               fontWeight={500}
-                            >
-                              {diff > 0 ? '+' : ''}{formatCurrency(diff, account.currency)}
-                            </Typography>
+                              color={diff > 0 ? 'success.main' : diff < 0 ? 'error.main' : 'textSecondary'}
+                              showSign
+                              signType="auto"
+                            />
                           )}
                         </TableCell>
                         <TableCell align="center">

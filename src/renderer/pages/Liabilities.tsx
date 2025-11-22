@@ -10,6 +10,7 @@ import {
 import { IconHome, IconCreditCard, IconCar, IconReceipt } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import LiabilityModal from '../components/modals/LiabilityModal'
+import AmountText from '../components/shared/AmountText'
 
 interface Liability {
   id: string
@@ -79,10 +80,6 @@ export default function Liabilities() {
     }
   }
 
-  const formatCurrency = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`
-  }
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('ko-KR', {
@@ -132,9 +129,13 @@ export default function Liabilities() {
                   <Typography variant="body2" color="textSecondary" gutterBottom>
                     총 부채 (원화 환산)
                   </Typography>
-                  <Typography variant="h3" fontWeight={600} color="error.main">
-                    KRW {totalLiabilities.toLocaleString()}
-                  </Typography>
+                  <AmountText
+                    amount={totalLiabilities}
+                    currency="KRW"
+                    variant="h3"
+                    fontWeight={600}
+                    color="error.main"
+                  />
                 </Box>
                 <Typography variant="caption" color="textSecondary">
                   환율: 1 AED = {exchangeRate.toLocaleString()} KRW
@@ -194,13 +195,23 @@ export default function Liabilities() {
                     </Stack>
 
                     <Box textAlign="right">
-                      <Typography variant="h5" fontWeight={600} color="error.main">
-                        {formatCurrency(liability.current_balance, liability.currency)}
-                      </Typography>
+                      <AmountText
+                        amount={liability.current_balance}
+                        currency={liability.currency}
+                        variant="h5"
+                        fontWeight={600}
+                        color="error.main"
+                      />
                       {liability.current_balance !== liability.principal_amount && (
-                        <Typography variant="body2" color="textSecondary">
-                          원금: {formatCurrency(liability.principal_amount, liability.currency)}
-                        </Typography>
+                        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                          <Typography variant="body2" color="textSecondary">원금:</Typography>
+                          <AmountText
+                            amount={liability.principal_amount}
+                            currency={liability.currency}
+                            variant="body2"
+                            color="textSecondary"
+                          />
+                        </Stack>
                       )}
                     </Box>
                   </Stack>
