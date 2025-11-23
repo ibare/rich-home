@@ -7,19 +7,15 @@ import {
   Button,
   TextField,
   FormControl,
-  FormLabel,
   InputLabel,
   Select,
   MenuItem,
   Stack,
   IconButton,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  InputAdornment,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import AmountInput from '../shared/AmountInput'
 
 interface LiabilityModalProps {
   open: boolean
@@ -33,11 +29,6 @@ const typeOptions = [
   { value: 'jeonse_deposit', label: '전세보증금 (받은 것)' },
   { value: 'car_loan', label: '자동차대출' },
   { value: 'other', label: '기타' },
-]
-
-const currencyOptions = [
-  { value: 'KRW', label: 'KRW' },
-  { value: 'AED', label: 'AED' },
 ]
 
 export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModalProps) {
@@ -54,52 +45,18 @@ export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModa
   })
   const [saving, setSaving] = useState(false)
 
-  const formatNumber = (value: string, currency: string) => {
-    const num = value.replace(/[^\d.]/g, '')
-    if (num === '') return ''
-
-    // AED는 소수점 2자리까지 허용
-    if (currency === 'AED') {
-      const parts = num.split('.')
-      if (parts.length > 2) return formatNumber(parts[0] + '.' + parts.slice(1).join(''), currency)
-      if (parts[1]?.length > 2) {
-        parts[1] = parts[1].slice(0, 2)
-      }
-      const parsed = parseFloat(parts.join('.'))
-      if (isNaN(parsed)) return ''
-      if (parts.length === 2) {
-        return parsed.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-          .replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-          + (num.endsWith('.') ? '.' : (parts[1] === '' ? '.' : ''))
-      }
-      return parsed.toLocaleString()
-    }
-
-    // KRW는 정수만
-    const parsed = parseInt(num.split('.')[0], 10)
-    if (isNaN(parsed)) return ''
-    return parsed.toLocaleString()
-  }
-
   const handleChange = (field: string, value: string) => {
-    if (field === 'currency') {
-      // 통화 변경시 금액 재포맷
-      setFormData((prev) => ({
-        ...prev,
-        currency: value,
-        principal_amount: prev.principal_amount ? formatNumber(prev.principal_amount.replace(/,/g, ''), value) : '',
-        current_balance: prev.current_balance ? formatNumber(prev.current_balance.replace(/,/g, ''), value) : '',
-      }))
-    } else {
-      setFormData((prev) => ({ ...prev, [field]: value }))
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAmountChange = (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/,/g, '')
-    if (raw === '' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && formData.currency === 'AED')) {
-      setFormData((prev) => ({ ...prev, [field]: formatNumber(raw, prev.currency) }))
-    }
+  // AmountInput에서 원금과 통화 변경 처리
+  const handlePrincipalChange = (amount: string, currency: string) => {
+    setFormData((prev) => ({ ...prev, principal_amount: amount, currency }))
+  }
+
+  // AmountInput에서 현재 잔액 변경 처리 (통화는 원금과 동일하게 유지)
+  const handleBalanceChange = (amount: string) => {
+    setFormData((prev) => ({ ...prev, current_balance: amount }))
   }
 
   const handleSubmit = async () => {
@@ -211,31 +168,20 @@ export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModa
             required
           />
 
-          <TextField
+          <AmountInput
             label="원금"
             value={formData.principal_amount}
-            onChange={(e) => handleAmountChange('principal_amount', e)}
-            fullWidth
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">{formData.currency}</InputAdornment>
-              ),
-            }}
-            placeholder="0"
+            currency={formData.currency}
+            onChange={handlePrincipalChange}
+            sx={{ width: '100%' }}
           />
 
-          <TextField
+          <AmountInput
             label="현재 잔액 (비워두면 원금과 동일)"
             value={formData.current_balance}
-            onChange={(e) => handleAmountChange('current_balance', e)}
-            fullWidth
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">{formData.currency}</InputAdornment>
-              ),
-            }}
-            placeholder="0"
+            currency={formData.currency}
+            onChange={(amount) => handleBalanceChange(amount)}
+            sx={{ width: '100%' }}
           />
 
           <TextField
@@ -266,24 +212,6 @@ export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModa
               InputLabelProps={{ shrink: true }}
             />
           </Stack>
-
-          <FormControl>
-            <FormLabel>통화</FormLabel>
-            <RadioGroup
-              row
-              value={formData.currency}
-              onChange={(e) => handleChange('currency', e.target.value)}
-            >
-              {currencyOptions.map((opt) => (
-                <FormControlLabel
-                  key={opt.value}
-                  value={opt.value}
-                  control={<Radio size="small" />}
-                  label={opt.label}
-                />
-              ))}
-            </RadioGroup>
-          </FormControl>
 
           <TextField
             label="메모"

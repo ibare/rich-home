@@ -12,7 +12,6 @@ import {
   MenuItem,
   Stack,
   IconButton,
-  InputAdornment,
   ToggleButton,
   ToggleButtonGroup,
   Table,
@@ -31,6 +30,7 @@ import {
 } from '@mui/material'
 import { IconX, IconPlus, IconTrash } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import AmountInput from '../shared/AmountInput'
 
 interface TransactionModalProps {
   open: boolean
@@ -141,13 +141,6 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     if (field === 'type') {
       setFormData((prev) => ({ ...prev, [field]: value, category_id: '' }))
       setDescriptionSuggestions([])
-    } else if (field === 'currency') {
-      // 통화 변경시 금액 재포맷
-      setFormData((prev) => ({
-        ...prev,
-        currency: value,
-        amount: prev.amount ? formatNumber(prev.amount.replace(/,/g, ''), value) : '',
-      }))
     } else if (field === 'category_id') {
       setFormData((prev) => ({ ...prev, [field]: value }))
       loadDescriptionSuggestions(value)
@@ -156,39 +149,9 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     }
   }
 
-  const formatNumber = (value: string, currency: string) => {
-    const num = value.replace(/[^\d.]/g, '')
-    if (num === '') return ''
-
-    // AED는 소수점 2자리까지 허용
-    if (currency === 'AED') {
-      const parts = num.split('.')
-      if (parts.length > 2) return formatNumber(parts[0] + '.' + parts.slice(1).join(''), currency)
-      if (parts[1]?.length > 2) {
-        parts[1] = parts[1].slice(0, 2)
-      }
-      const parsed = parseFloat(parts.join('.'))
-      if (isNaN(parsed)) return ''
-      // 소수점이 있으면 유지
-      if (parts.length === 2) {
-        return parsed.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-          .replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-          + (num.endsWith('.') ? '.' : (parts[1] === '' ? '.' : ''))
-      }
-      return parsed.toLocaleString()
-    }
-
-    // KRW는 정수만
-    const parsed = parseInt(num.split('.')[0], 10)
-    if (isNaN(parsed)) return ''
-    return parsed.toLocaleString()
-  }
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/,/g, '')
-    if (raw === '' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && formData.currency === 'AED')) {
-      setFormData((prev) => ({ ...prev, amount: formatNumber(raw, prev.currency) }))
-    }
+  // AmountInput에서 금액과 통화 변경 처리
+  const handleAmountChange = (amount: string, currency: string) => {
+    setFormData((prev) => ({ ...prev, amount, currency }))
   }
 
   // 목록에 추가 (아직 저장 X)
@@ -368,21 +331,6 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
 
             {/* 두 번째 줄: 통화, 카테고리, 금액, 내용, 추가 버튼 */}
             <Stack direction="row" spacing={2} onKeyDown={handleKeyDown}>
-              {/* 통화 */}
-              <ToggleButtonGroup
-                value={formData.currency}
-                exclusive
-                onChange={(_, value) => value && handleChange('currency', value)}
-                size="small"
-              >
-                <ToggleButton value="KRW" sx={{ px: 1.5 }}>
-                  KRW
-                </ToggleButton>
-                <ToggleButton value="AED" sx={{ px: 1.5 }}>
-                  AED
-                </ToggleButton>
-              </ToggleButtonGroup>
-
               {/* 카테고리 */}
               <FormControl size="small" sx={{ minWidth: 150 }}>
                 <InputLabel>카테고리</InputLabel>
@@ -423,19 +371,11 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
               </FormControl>
 
               {/* 금액 */}
-              <TextField
+              <AmountInput
                 inputRef={amountRef}
-                label="금액"
                 value={formData.amount}
+                currency={formData.currency}
                 onChange={handleAmountChange}
-                size="small"
-                sx={{ width: 150 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">{formData.currency}</InputAdornment>
-                  ),
-                }}
-                placeholder="0"
                 autoFocus
               />
 

@@ -8,10 +8,10 @@ import {
   TextField,
   Stack,
   IconButton,
-  InputAdornment,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import AmountInput from '../shared/AmountInput'
 
 interface BalanceModalProps {
   open: boolean
@@ -67,39 +67,9 @@ export default function BalanceModal({
     onClose()
   }
 
-  const formatBalance = (value: string) => {
-    // Remove non-numeric characters except minus and decimal point
-    const num = value.replace(/[^\d.-]/g, '')
-    if (num === '' || num === '-') return num
-
-    // AED는 소수점 2자리까지 허용
-    if (currency === 'AED') {
-      const parts = num.split('.')
-      if (parts.length > 2) return formatBalance(parts[0] + '.' + parts.slice(1).join(''))
-      if (parts[1]?.length > 2) {
-        parts[1] = parts[1].slice(0, 2)
-      }
-      const parsed = parseFloat(parts.join('.'))
-      if (isNaN(parsed)) return ''
-      if (parts.length === 2) {
-        return parsed.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-          .replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-          + (num.endsWith('.') ? '.' : (parts[1] === '' ? '.' : ''))
-      }
-      return parsed.toLocaleString()
-    }
-
-    // KRW는 정수만
-    const parsed = parseInt(num.split('.')[0], 10)
-    if (isNaN(parsed)) return ''
-    return parsed.toLocaleString()
-  }
-
-  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/,/g, '')
-    if (raw === '' || raw === '-' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && currency === 'AED')) {
-      setBalance(formatBalance(raw))
-    }
+  // AmountInput에서 잔고 변경 처리 (통화는 계좌에서 결정되므로 무시)
+  const handleBalanceChange = (amount: string) => {
+    setBalance(amount)
   }
 
   return (
@@ -115,19 +85,13 @@ export default function BalanceModal({
 
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 1 }}>
-          <TextField
+          <AmountInput
             label="잔고"
             value={balance}
-            onChange={handleBalanceChange}
-            fullWidth
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">{currency}</InputAdornment>
-              ),
-            }}
-            placeholder="0"
+            currency={currency}
+            onChange={(amount) => handleBalanceChange(amount)}
             autoFocus
+            sx={{ width: '100%' }}
           />
 
           <TextField

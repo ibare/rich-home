@@ -13,10 +13,10 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  InputAdornment,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import AmountInput from '../shared/AmountInput'
 
 interface AssetModalProps {
   open: boolean
@@ -27,11 +27,6 @@ interface AssetModalProps {
 const typeOptions = [
   { value: 'real_estate', label: '부동산' },
   { value: 'stock', label: '주식' },
-]
-
-const currencyOptions = [
-  { value: 'KRW', label: 'KRW' },
-  { value: 'AED', label: 'AED' },
 ]
 
 export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) {
@@ -46,51 +41,13 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
   })
   const [saving, setSaving] = useState(false)
 
-  const formatNumber = (value: string, currency: string) => {
-    const num = value.replace(/[^\d.]/g, '')
-    if (num === '') return ''
-
-    // AED는 소수점 2자리까지 허용
-    if (currency === 'AED') {
-      const parts = num.split('.')
-      if (parts.length > 2) return formatNumber(parts[0] + '.' + parts.slice(1).join(''), currency)
-      if (parts[1]?.length > 2) {
-        parts[1] = parts[1].slice(0, 2)
-      }
-      const parsed = parseFloat(parts.join('.'))
-      if (isNaN(parsed)) return ''
-      if (parts.length === 2) {
-        return parsed.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-          .replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-          + (num.endsWith('.') ? '.' : (parts[1] === '' ? '.' : ''))
-      }
-      return parsed.toLocaleString()
-    }
-
-    // KRW는 정수만
-    const parsed = parseInt(num.split('.')[0], 10)
-    if (isNaN(parsed)) return ''
-    return parsed.toLocaleString()
-  }
-
   const handleChange = (field: string, value: string) => {
-    if (field === 'currency') {
-      // 통화 변경시 금액 재포맷
-      setFormData((prev) => ({
-        ...prev,
-        currency: value,
-        purchase_amount: prev.purchase_amount ? formatNumber(prev.purchase_amount.replace(/,/g, ''), value) : '',
-      }))
-    } else {
-      setFormData((prev) => ({ ...prev, [field]: value }))
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/,/g, '')
-    if (raw === '' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && formData.currency === 'AED')) {
-      setFormData((prev) => ({ ...prev, purchase_amount: formatNumber(raw, prev.currency) }))
-    }
+  // AmountInput에서 금액과 통화 변경 처리
+  const handleAmountChange = (amount: string, currency: string) => {
+    setFormData((prev) => ({ ...prev, purchase_amount: amount, currency }))
   }
 
   const handleSubmit = async () => {
@@ -194,18 +151,12 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
             required
           />
 
-          <TextField
+          <AmountInput
             label={formData.type === 'real_estate' ? '취득 금액' : '매수 단가'}
             value={formData.purchase_amount}
+            currency={formData.currency}
             onChange={handleAmountChange}
-            fullWidth
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">{formData.currency}</InputAdornment>
-              ),
-            }}
-            placeholder="0"
+            sx={{ width: '100%' }}
           />
 
           {formData.type === 'stock' && (
@@ -230,24 +181,6 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
               shrink: true,
             }}
           />
-
-          <FormControl>
-            <FormLabel>통화</FormLabel>
-            <RadioGroup
-              row
-              value={formData.currency}
-              onChange={(e) => handleChange('currency', e.target.value)}
-            >
-              {currencyOptions.map((opt) => (
-                <FormControlLabel
-                  key={opt.value}
-                  value={opt.value}
-                  control={<Radio size="small" />}
-                  label={opt.label}
-                />
-              ))}
-            </RadioGroup>
-          </FormControl>
 
           <TextField
             label="메모"

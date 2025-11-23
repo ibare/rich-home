@@ -7,16 +7,11 @@ import {
   Button,
   TextField,
   FormControl,
-  FormLabel,
   InputLabel,
   Select,
   MenuItem,
   Stack,
   IconButton,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  InputAdornment,
   Chip,
   Box,
   Typography,
@@ -26,6 +21,7 @@ import {
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import AmountInput from '../shared/AmountInput'
 
 interface BudgetItem {
   id: string
@@ -56,11 +52,6 @@ const budgetTypeOptions = [
   { value: 'variable_monthly', label: '변동 월예산', description: '매월 한도 조정 가능' },
   { value: 'annual', label: '연간 분배', description: '연간 금액을 12개월로 분배' },
   { value: 'quarterly', label: '분기 분배', description: '분기 금액을 3개월로 분배' },
-]
-
-const currencyOptions = [
-  { value: 'KRW', label: 'KRW' },
-  { value: 'AED', label: 'AED' },
 ]
 
 export default function BudgetItemModal({ open, onClose, onSaved, editItem }: BudgetItemModalProps) {
@@ -121,51 +112,13 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     }
   }
 
-  const formatNumber = (value: string, currency: string) => {
-    const num = value.replace(/[^\d.]/g, '')
-    if (num === '') return ''
-
-    // AED는 소수점 2자리까지 허용
-    if (currency === 'AED') {
-      const parts = num.split('.')
-      if (parts.length > 2) return formatNumber(parts[0] + '.' + parts.slice(1).join(''), currency)
-      if (parts[1]?.length > 2) {
-        parts[1] = parts[1].slice(0, 2)
-      }
-      const parsed = parseFloat(parts.join('.'))
-      if (isNaN(parsed)) return ''
-      if (parts.length === 2) {
-        return parsed.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-          .replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-          + (num.endsWith('.') ? '.' : (parts[1] === '' ? '.' : ''))
-      }
-      return parsed.toLocaleString()
-    }
-
-    // KRW는 정수만
-    const parsed = parseInt(num.split('.')[0], 10)
-    if (isNaN(parsed)) return ''
-    return parsed.toLocaleString()
-  }
-
   const handleChange = (field: string, value: string | string[]) => {
-    if (field === 'currency' && typeof value === 'string') {
-      // 통화 변경시 금액 재포맷
-      setFormData((prev) => ({
-        ...prev,
-        currency: value,
-        base_amount: prev.base_amount ? formatNumber(prev.base_amount.replace(/,/g, ''), value) : '',
-      }))
-    } else {
-      setFormData((prev) => ({ ...prev, [field]: value }))
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/,/g, '')
-    if (raw === '' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && formData.currency === 'AED')) {
-      setFormData((prev) => ({ ...prev, base_amount: formatNumber(raw, prev.currency) }))
-    }
+  // AmountInput에서 금액과 통화 변경 처리
+  const handleAmountChange = (amount: string, currency: string) => {
+    setFormData((prev) => ({ ...prev, base_amount: amount, currency }))
   }
 
   const getAmountLabel = () => {
@@ -336,25 +289,21 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             </Select>
           </FormControl>
 
-          <TextField
-            label={getAmountLabel()}
-            value={formData.base_amount}
-            onChange={handleAmountChange}
-            fullWidth
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">{formData.currency}</InputAdornment>
-              ),
-            }}
-            placeholder="0"
-            helperText={
-              (formData.budget_type === 'annual' || formData.budget_type === 'quarterly') &&
-              formData.base_amount
-                ? `월 분배액: ${formData.currency} ${getMonthlyAmount().toLocaleString()}`
-                : undefined
-            }
-          />
+          <Box>
+            <AmountInput
+              label={getAmountLabel()}
+              value={formData.base_amount}
+              currency={formData.currency}
+              onChange={handleAmountChange}
+              sx={{ width: '100%' }}
+            />
+            {(formData.budget_type === 'annual' || formData.budget_type === 'quarterly') &&
+              formData.base_amount && (
+                <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
+                  월 분배액: {formData.currency} {getMonthlyAmount().toLocaleString()}
+                </Typography>
+              )}
+          </Box>
 
           <FormControl fullWidth>
             <InputLabel>연결 카테고리</InputLabel>
@@ -399,24 +348,6 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
                 </MenuItem>
               ))}
             </Select>
-          </FormControl>
-
-          <FormControl>
-            <FormLabel>통화</FormLabel>
-            <RadioGroup
-              row
-              value={formData.currency}
-              onChange={(e) => handleChange('currency', e.target.value)}
-            >
-              {currencyOptions.map((opt) => (
-                <FormControlLabel
-                  key={opt.value}
-                  value={opt.value}
-                  control={<Radio size="small" />}
-                  label={opt.label}
-                />
-              ))}
-            </RadioGroup>
           </FormControl>
 
           <TextField
