@@ -35,11 +35,23 @@ const Header = ({ toggleMobileSidebar }: HeaderProps) => {
 
   return (
     <AppBarStyled position="sticky" color="default">
+      {/* 드래그 영역 (macOS 타이틀바) */}
+      <Box
+        className="drag-region"
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '20px',
+        }}
+      />
       <ToolbarStyled>
         <IconButton
           color="inherit"
           aria-label="menu"
           onClick={toggleMobileSidebar}
+          className="no-drag"
           sx={{
             display: {
               lg: 'none',
@@ -54,9 +66,9 @@ const Header = ({ toggleMobileSidebar }: HeaderProps) => {
           {pageTitle}
         </Typography>
 
-        <Box flexGrow={1} />
+        <Box flexGrow={1} className="drag-region" sx={{ height: '100%' }} />
 
-        <Stack spacing={1} direction="row" alignItems="center">
+        <Stack spacing={1} direction="row" alignItems="center" className="no-drag">
           {onAdd && (
             <IconButton
               color="primary"

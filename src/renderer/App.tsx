@@ -6,7 +6,6 @@ import Sidebar from './components/layout/sidebar/Sidebar'
 import Header from './components/layout/header/Header'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
-import MonthlyClosing from './pages/MonthlyClosing'
 import Accounts from './pages/Accounts'
 import AccountBalanceHistory from './pages/AccountBalanceHistory'
 import Assets from './pages/Assets'
@@ -91,7 +90,6 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/transactions" element={<Transactions />} />
-                  <Route path="/monthly-closing" element={<MonthlyClosing />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/accounts/:accountId" element={<AccountBalanceHistory />} />
                   <Route path="/assets" element={<Assets />} />

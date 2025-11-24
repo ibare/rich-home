@@ -32,12 +32,24 @@ import { IconX, IconPlus, IconTrash } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 
+interface EditTransaction {
+  id: string
+  type: 'income' | 'expense'
+  amount: number
+  currency: string
+  category_id: string
+  date: string
+  description: string | null
+  include_in_stats: number
+}
+
 interface TransactionModalProps {
   open: boolean
   onClose: () => void
   onSaved: () => void
   selectedYear?: number
   selectedMonth?: number
+  editTransaction?: EditTransaction | null
 }
 
 interface Category {
@@ -65,9 +77,10 @@ const getLastDayOfMonth = (year: number, month: number) => {
   return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
-export default function TransactionModal({ open, onClose, onSaved, selectedYear, selectedMonth }: TransactionModalProps) {
+export default function TransactionModal({ open, onClose, onSaved, selectedYear, selectedMonth, editTransaction }: TransactionModalProps) {
   const [categories, setCategories] = useState<Category[]>([])
   const [pendingList, setPendingList] = useState<PendingTransaction[]>([])
+  const isEditMode = !!editTransaction
 
   // 초기 날짜: 선택된 년월의 마지막 날 또는 오늘
   const getInitialDate = () => {
@@ -93,15 +106,27 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   useEffect(() => {
     if (open) {
       loadCategories()
-      // 모달 열릴 때 선택된 년월의 마지막 날로 날짜 설정
-      if (selectedYear && selectedMonth) {
+      if (editTransaction) {
+        // 수정 모드: 기존 데이터로 폼 채우기
+        setFormData({
+          type: editTransaction.type,
+          amount: editTransaction.amount.toLocaleString(),
+          currency: editTransaction.currency,
+          category_id: editTransaction.category_id,
+          date: editTransaction.date,
+          description: editTransaction.description || '',
+          include_in_stats: editTransaction.include_in_stats === 1,
+        })
+        loadDescriptionSuggestions(editTransaction.category_id)
+      } else if (selectedYear && selectedMonth) {
+        // 추가 모드: 선택된 년월의 마지막 날로 날짜 설정
         setFormData((prev) => ({
           ...prev,
           date: getLastDayOfMonth(selectedYear, selectedMonth),
         }))
       }
     }
-  }, [open, selectedYear, selectedMonth])
+  }, [open, selectedYear, selectedMonth, editTransaction])
 
   const loadCategories = async () => {
     try {
@@ -201,6 +226,50 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     setPendingList((prev) => prev.filter((t) => t.id !== id))
   }
 
+  // 수정 저장
+  const handleUpdate = async () => {
+    if (!editTransaction) return
+
+    const amount = parseFloat(formData.amount.replace(/,/g, ''))
+    if (isNaN(amount) || amount <= 0) {
+      alert('금액을 입력해주세요.')
+      return
+    }
+
+    if (!formData.category_id) {
+      alert('카테고리를 선택해주세요.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await window.electronAPI.db.query(
+        `UPDATE transactions
+         SET type = ?, amount = ?, currency = ?, category_id = ?, date = ?, description = ?, include_in_stats = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+        [
+          formData.type,
+          amount,
+          formData.currency,
+          formData.category_id,
+          formData.date,
+          formData.description || null,
+          formData.include_in_stats ? 1 : 0,
+          editTransaction.id,
+        ]
+      )
+
+      resetForm()
+      onSaved()
+      onClose()
+    } catch (error) {
+      console.error('Failed to update transaction:', error)
+      alert('거래 수정에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // 전체 저장
   const handleSaveAll = async () => {
     if (pendingList.length === 0) {
@@ -253,11 +322,15 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     onClose()
   }
 
-  // Enter 키로 추가
+  // Enter 키로 추가/저장
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleAddToList()
+      if (isEditMode) {
+        handleUpdate()
+      } else {
+        handleAddToList()
+      }
     }
   }
 
@@ -277,7 +350,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        거래 등록
+        {isEditMode ? '거래 수정' : '거래 등록'}
         <IconButton size="small" onClick={handleClose}>
           <IconX size={20} />
         </IconButton>
@@ -398,118 +471,127 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
                 )}
               />
 
-              {/* 추가 버튼 */}
+              {/* 추가/저장 버튼 */}
               <Button
                 variant="contained"
-                onClick={handleAddToList}
-                startIcon={<IconPlus size={18} />}
+                onClick={isEditMode ? handleUpdate : handleAddToList}
+                startIcon={isEditMode ? null : <IconPlus size={18} />}
                 sx={{ minWidth: 100 }}
+                disabled={saving}
               >
-                추가
+                {isEditMode ? (saving ? '저장 중...' : '저장') : '추가'}
               </Button>
             </Stack>
 
-            <Typography variant="caption" color="textSecondary">
-              Enter 키를 눌러 빠르게 추가할 수 있습니다.
-            </Typography>
+            {!isEditMode && (
+              <Typography variant="caption" color="textSecondary">
+                Enter 키를 눌러 빠르게 추가할 수 있습니다.
+              </Typography>
+            )}
           </Stack>
         </Box>
 
-        <Divider sx={{ my: 2 }} />
-
-        {/* 추가된 거래 목록 */}
-        <Typography variant="subtitle2" gutterBottom>
-          추가된 거래 ({pendingList.length}건)
-        </Typography>
-
-        {pendingList.length === 0 ? (
-          <Box sx={{ py: 4, textAlign: 'center' }}>
-            <Typography color="textSecondary">
-              위 폼에서 거래를 추가하세요.
-            </Typography>
-          </Box>
-        ) : (
+        {!isEditMode && (
           <>
-            <TableContainer sx={{ maxHeight: 300 }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>유형</TableCell>
-                    <TableCell>날짜</TableCell>
-                    <TableCell>카테고리</TableCell>
-                    <TableCell>내용</TableCell>
-                    <TableCell align="right">금액</TableCell>
-                    <TableCell width={40}></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {pendingList.map((tx) => (
-                    <TableRow key={tx.id} hover>
-                      <TableCell>
-                        <Chip
-                          label={tx.type === 'expense' ? '지출' : '수입'}
-                          size="small"
-                          color={tx.type === 'expense' ? 'error' : 'success'}
-                        />
-                      </TableCell>
-                      <TableCell>{tx.date}</TableCell>
-                      <TableCell>{tx.category_name}</TableCell>
-                      <TableCell>{tx.description || '-'}</TableCell>
-                      <TableCell align="right">
-                        <Typography
-                          fontWeight={500}
-                          color={tx.type === 'expense' ? 'error.main' : 'success.main'}
-                        >
-                          {tx.type === 'expense' ? '-' : '+'}
-                          {tx.currency} {tx.amount.toLocaleString()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRemoveFromList(tx.id)}
-                          color="error"
-                        >
-                          <IconTrash size={16} />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <Divider sx={{ my: 2 }} />
 
-            {/* 합계 */}
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-              <Stack direction="row" justifyContent="flex-end" spacing={4}>
-                {totalIncome > 0 && (
-                  <Typography color="success.main" fontWeight={600}>
-                    수입: +KRW {totalIncome.toLocaleString()}
-                  </Typography>
-                )}
-                {totalExpense > 0 && (
-                  <Typography color="error.main" fontWeight={600}>
-                    지출: -KRW {totalExpense.toLocaleString()}
-                  </Typography>
-                )}
-              </Stack>
-            </Box>
+            {/* 추가된 거래 목록 */}
+            <Typography variant="subtitle2" gutterBottom>
+              추가된 거래 ({pendingList.length}건)
+            </Typography>
+
+            {pendingList.length === 0 ? (
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <Typography color="textSecondary">
+                  위 폼에서 거래를 추가하세요.
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                <TableContainer sx={{ maxHeight: 300 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>유형</TableCell>
+                        <TableCell>날짜</TableCell>
+                        <TableCell>카테고리</TableCell>
+                        <TableCell>내용</TableCell>
+                        <TableCell align="right">금액</TableCell>
+                        <TableCell width={40}></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {pendingList.map((tx) => (
+                        <TableRow key={tx.id} hover>
+                          <TableCell>
+                            <Chip
+                              label={tx.type === 'expense' ? '지출' : '수입'}
+                              size="small"
+                              color={tx.type === 'expense' ? 'error' : 'success'}
+                            />
+                          </TableCell>
+                          <TableCell>{tx.date}</TableCell>
+                          <TableCell>{tx.category_name}</TableCell>
+                          <TableCell>{tx.description || '-'}</TableCell>
+                          <TableCell align="right">
+                            <Typography
+                              fontWeight={500}
+                              color={tx.type === 'expense' ? 'error.main' : 'success.main'}
+                            >
+                              {tx.type === 'expense' ? '-' : '+'}
+                              {tx.currency} {tx.amount.toLocaleString()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleRemoveFromList(tx.id)}
+                              color="error"
+                            >
+                              <IconTrash size={16} />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {/* 합계 */}
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                  <Stack direction="row" justifyContent="flex-end" spacing={4}>
+                    {totalIncome > 0 && (
+                      <Typography color="success.main" fontWeight={600}>
+                        수입: +KRW {totalIncome.toLocaleString()}
+                      </Typography>
+                    )}
+                    {totalExpense > 0 && (
+                      <Typography color="error.main" fontWeight={600}>
+                        지출: -KRW {totalExpense.toLocaleString()}
+                      </Typography>
+                    )}
+                  </Stack>
+                </Box>
+              </>
+            )}
           </>
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose} color="inherit">
-          취소
-        </Button>
-        <Button
-          onClick={handleSaveAll}
-          variant="contained"
-          disabled={saving || pendingList.length === 0}
-        >
-          {saving ? '저장 중...' : `${pendingList.length}건 저장`}
-        </Button>
-      </DialogActions>
+      {!isEditMode && (
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleClose} color="inherit">
+            취소
+          </Button>
+          <Button
+            onClick={handleSaveAll}
+            variant="contained"
+            disabled={saving || pendingList.length === 0}
+          >
+            {saving ? '저장 중...' : `${pendingList.length}건 저장`}
+          </Button>
+        </DialogActions>
+      )}
     </Dialog>
   )
 }

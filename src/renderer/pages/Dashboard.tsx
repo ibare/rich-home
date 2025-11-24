@@ -174,20 +174,33 @@ export default function Dashboard() {
         }
       }
 
-      // 이번 달 예산
-      const monthlyBudgets = (await window.electronAPI.db.query(`
-        SELECT mb.amount, bi.currency
-        FROM monthly_budgets mb
-        JOIN budget_items bi ON mb.budget_item_id = bi.id
-        WHERE mb.year = ? AND mb.month = ?
-      `, [year, month])) as { amount: number; currency: string }[]
+      // 이번 달 예산 (budget_items에서 직접 계산)
+      // distributed 예산은 기간 기반 월 분배액 계산, 유효 기간 내인 것만 포함
+      const budgetItemsResult = (await window.electronAPI.db.query(`
+        SELECT
+          CASE
+            WHEN budget_type = 'distributed' AND valid_from IS NOT NULL AND valid_to IS NOT NULL THEN
+              ROUND(base_amount / MAX(1, (
+                (CAST(strftime('%Y', valid_to) AS INTEGER) - CAST(strftime('%Y', valid_from) AS INTEGER)) * 12 +
+                (CAST(strftime('%m', valid_to) AS INTEGER) - CAST(strftime('%m', valid_from) AS INTEGER)) + 1
+              )))
+            ELSE base_amount
+          END as monthly_amount,
+          currency
+        FROM budget_items
+        WHERE is_active = 1
+          AND (
+            budget_type != 'distributed'
+            OR (valid_from < ? AND valid_to >= ?)
+          )
+      `, [endDate, startDate])) as { monthly_amount: number; currency: string }[]
 
       let monthlyBudget = 0
-      for (const budget of monthlyBudgets) {
+      for (const budget of budgetItemsResult) {
         if (budget.currency === 'AED') {
-          monthlyBudget += budget.amount * exchangeRate
+          monthlyBudget += budget.monthly_amount * exchangeRate
         } else {
-          monthlyBudget += budget.amount
+          monthlyBudget += budget.monthly_amount
         }
       }
 

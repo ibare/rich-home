@@ -65,6 +65,12 @@
     "files": [
       "dist/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "data/rich-home.db",
+        "to": "data/rich-home.db"
+      }
+    ],
     "mac": {
       "category": "public.app-category.finance",
       "icon": "build/icon.icns",

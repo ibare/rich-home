@@ -16,6 +16,16 @@ const getConfigPath = () => path.join(app.getPath('userData'), 'config.json')
 // 기본 DB 경로
 const getDefaultDbPath = () => path.join(app.getPath('userData'), 'rich-home.db')
 
+// 번들된 DB 경로 (extraResources에 포함된 경우)
+const getBundledDbPath = () => {
+  // 개발 모드에서는 프로젝트의 data 폴더
+  if (process.env.NODE_ENV === 'development') {
+    return path.join(process.cwd(), 'data', 'rich-home.db')
+  }
+  // 프로덕션에서는 resources 폴더
+  return path.join(process.resourcesPath, 'data', 'rich-home.db')
+}
+
 interface AppConfig {
   dbPath?: string
 }
@@ -72,6 +82,15 @@ export function initDatabase(customPath?: string): void {
   const dbDir = path.dirname(dbPath)
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true })
+  }
+
+  // 사용자 DB가 없고 번들된 DB가 있으면 복사
+  if (!fs.existsSync(dbPath)) {
+    const bundledDbPath = getBundledDbPath()
+    if (fs.existsSync(bundledDbPath)) {
+      console.log('Copying bundled database from:', bundledDbPath)
+      fs.copyFileSync(bundledDbPath, dbPath)
+    }
   }
 
   console.log('Database path:', dbPath)

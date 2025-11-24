@@ -71,6 +71,9 @@ export default function Statistics() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [loading, setLoading] = useState(true)
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([])
+  const [excludedItems, setExcludedItems] = useState<{ month: string; [key: string]: number | string }[]>([])
+  const [excludedCategories, setExcludedCategories] = useState<string[]>([])
+  const [excludedItemList, setExcludedItemList] = useState<{ name: string; total: number; color: string; enabled: boolean }[]>([])
   const [viewType, setViewType] = useState<'flow' | 'bar'>('flow')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
 
@@ -196,6 +199,75 @@ export default function Statistics() {
       }
 
       setMonthlyData(data)
+
+      // 통계 제외 항목 거래내역별 집계
+      const excludedResult = await window.electronAPI.db.query(`
+        SELECT
+          strftime('%m', date) as month,
+          t.description,
+          t.currency,
+          SUM(t.amount) as total
+        FROM transactions t
+        WHERE strftime('%Y', t.date) = ?
+          AND t.include_in_stats = 0
+          AND t.type = 'expense'
+        GROUP BY month, t.description, t.currency
+        ORDER BY month, total DESC
+      `, [String(selectedYear)]) as {
+        month: string
+        description: string
+        currency: string
+        total: number
+      }[]
+
+      // 거래내역 항목별 총계 계산
+      const itemTotals = new Map<string, number>()
+      for (const row of excludedResult) {
+        const amountKRW = row.currency === 'AED' ? row.total * rate : row.total
+        itemTotals.set(row.description, (itemTotals.get(row.description) || 0) + Math.round(amountKRW))
+      }
+
+      // 총계 기준 정렬 후 항목 목록 생성
+      const sortedItems = Array.from(itemTotals.entries())
+        .sort((a, b) => b[1] - a[1])
+      const items = sortedItems.map(([name]) => name)
+      setExcludedCategories(items)
+
+      // 기존 enabled 상태 유지
+      const existingEnabledMap = new Map(excludedItemList.map(item => [item.name, item.enabled]))
+      const newExcludedItemList = sortedItems.map(([name, total], index) => ({
+        name,
+        total,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        enabled: existingEnabledMap.has(name) ? existingEnabledMap.get(name)! : true,
+      }))
+      setExcludedItemList(newExcludedItemList)
+
+      // 월별 거래내역별 데이터 구조화
+      const excludedMonthlyMap = new Map<string, { [key: string]: number }>()
+      for (let m = 1; m <= 12; m++) {
+        const key = String(m).padStart(2, '0')
+        excludedMonthlyMap.set(key, {})
+      }
+
+      for (const row of excludedResult) {
+        const existing = excludedMonthlyMap.get(row.month) || {}
+        const amountKRW = row.currency === 'AED' ? row.total * rate : row.total
+        existing[row.description] = (existing[row.description] || 0) + Math.round(amountKRW)
+        excludedMonthlyMap.set(row.month, existing)
+      }
+
+      const excludedData: { month: string; [key: string]: number | string }[] = []
+      for (let m = 1; m <= 12; m++) {
+        const key = String(m).padStart(2, '0')
+        const values = excludedMonthlyMap.get(key) || {}
+        excludedData.push({
+          month: monthNames[m - 1],
+          ...values,
+        })
+      }
+
+      setExcludedItems(excludedData)
     } catch (error) {
       console.error('Failed to load monthly data:', error)
     } finally {
@@ -326,13 +398,13 @@ export default function Statistics() {
   }
 
   const formatYAxis = (value: number) => {
-    if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(0)}M`
+    if (value >= 100000000) {
+      return `${Math.round(value / 100000000).toLocaleString()}억`
     }
-    if (value >= 1000) {
-      return `${(value / 1000).toFixed(0)}K`
+    if (value >= 10000) {
+      return `${Math.round(value / 10000).toLocaleString()}만`
     }
-    return value.toString()
+    return value.toLocaleString()
   }
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -586,6 +658,116 @@ export default function Statistics() {
         </Box>
       </DashboardCard>
 
+      {/* 통계 제외 항목 지출 흐름 (항목별) */}
+      {excludedItemList.length > 0 && (
+        <DashboardCard title="통계 제외 항목 지출 흐름" sx={{ mt: 3 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+            {/* 차트 */}
+            <Box sx={{ flex: 2, height: 380 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={excludedItems}
+                  margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                  <XAxis
+                    dataKey="month"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#5A6A85', fontSize: 12 }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#5A6A85', fontSize: 12 }}
+                    tickFormatter={formatYAxis}
+                    scale="log"
+                    domain={[10000, 'auto']}
+                    allowDataOverflow
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend
+                    verticalAlign="top"
+                    height={36}
+                    formatter={(value) => (
+                      <span style={{ color: '#5A6A85', fontSize: 11 }}>{value}</span>
+                    )}
+                  />
+                  {excludedItemList.filter(item => item.enabled).map((item) => (
+                    <Line
+                      key={item.name}
+                      type="monotone"
+                      dataKey={item.name}
+                      name={item.name}
+                      stroke={item.color}
+                      strokeWidth={2}
+                      dot={{ fill: item.color, strokeWidth: 2, r: 4 }}
+                      connectNulls
+                    />
+                  ))}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </Box>
+
+            {/* 항목 선택 */}
+            <Box sx={{ flex: 1, minWidth: 200 }}>
+              <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
+                항목 선택
+              </Typography>
+              <Box sx={{ maxHeight: 280, overflow: 'auto' }}>
+                {excludedItemList.map((item) => (
+                  <FormControlLabel
+                    key={item.name}
+                    control={
+                      <Checkbox
+                        checked={item.enabled}
+                        onChange={() => setExcludedItemList(prev =>
+                          prev.map(i => i.name === item.name ? { ...i, enabled: !i.enabled } : i)
+                        )}
+                        size="small"
+                        sx={{
+                          color: item.color,
+                          '&.Mui-checked': { color: item.color },
+                        }}
+                      />
+                    }
+                    label={
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '2px',
+                            bgcolor: item.color,
+                          }}
+                        />
+                        <Typography variant="body2" sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.name}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {item.total.toLocaleString()}원
+                        </Typography>
+                      </Stack>
+                    }
+                    sx={{ display: 'flex', width: '100%', m: 0, py: 0.5 }}
+                  />
+                ))}
+              </Box>
+
+              {/* 선택된 항목 합계 */}
+              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="body2" color="textSecondary">
+                  선택된 항목 합계
+                </Typography>
+                <Typography variant="h5" fontWeight={600} color="primary.main">
+                  {excludedItemList.filter(i => i.enabled).reduce((sum, i) => sum + i.total, 0).toLocaleString()}원
+                </Typography>
+              </Box>
+            </Box>
+          </Stack>
+        </DashboardCard>
+      )}
+
       {/* 월별 상세 테이블 */}
       <DashboardCard title="월별 상세" sx={{ mt: 3 }}>
         <Box sx={{ overflowX: 'auto' }}>
@@ -668,10 +850,10 @@ export default function Statistics() {
                   {hasData && (
                     <Stack spacing={0.5} sx={{ mt: 1 }}>
                       <Typography variant="caption" sx={{ color: colors.income, fontWeight: 600 }}>
-                        +{(data.income / 10000).toFixed(0)}만
+                        +{Math.round(data.income / 10000).toLocaleString()}만
                       </Typography>
                       <Typography variant="caption" sx={{ color: colors.expense, fontWeight: 600 }}>
-                        -{(data.expense / 10000).toFixed(0)}만
+                        -{Math.round(data.expense / 10000).toLocaleString()}만
                       </Typography>
                     </Stack>
                   )}
@@ -815,27 +997,9 @@ export default function Statistics() {
 
             {/* 카테고리 토글 */}
             <Box sx={{ flex: 1, minWidth: 200 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="subtitle2" color="textSecondary">
-                  카테고리 선택
-                </Typography>
-                <Stack direction="row" spacing={0.5}>
-                  <Chip
-                    label="전체"
-                    size="small"
-                    variant="outlined"
-                    onClick={() => handleToggleAll(true)}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label="해제"
-                    size="small"
-                    variant="outlined"
-                    onClick={() => handleToggleAll(false)}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                </Stack>
-              </Stack>
+              <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
+                카테고리 선택
+              </Typography>
               <Box sx={{ maxHeight: 350, overflow: 'auto' }}>
                 {categoryList.map((cat) => (
                   <FormControlLabel
@@ -865,7 +1029,7 @@ export default function Statistics() {
                           {cat.name}
                         </Typography>
                         <Typography variant="caption" color="textSecondary">
-                          {(cat.total / 10000).toFixed(0)}만
+                          {cat.total.toLocaleString()}원
                         </Typography>
                       </Stack>
                     }
@@ -880,7 +1044,7 @@ export default function Statistics() {
                   선택된 카테고리 합계
                 </Typography>
                 <Typography variant="h5" fontWeight={600} color="primary.main">
-                  {(categoryList.filter(c => c.enabled).reduce((sum, c) => sum + c.total, 0) / 10000).toFixed(0)}만원
+                  {categoryList.filter(c => c.enabled).reduce((sum, c) => sum + c.total, 0).toLocaleString()}원
                 </Typography>
               </Box>
             </Box>

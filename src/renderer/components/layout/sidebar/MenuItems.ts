@@ -1,7 +1,6 @@
 import {
   IconLayoutDashboard,
   IconReceipt,
-  IconCalendarCheck,
   IconWallet,
   IconBuildingBank,
   IconCreditCard,
@@ -42,12 +41,6 @@ const MenuItems: MenuItem[] = [
     title: 'Transactions',
     icon: IconReceipt,
     href: '/transactions',
-  },
-  {
-    id: 'monthly-closing',
-    title: 'Monthly Closing',
-    icon: IconCalendarCheck,
-    href: '/monthly-closing',
   },
   {
     id: 'accounts',

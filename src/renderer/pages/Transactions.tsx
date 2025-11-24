@@ -12,13 +12,12 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  LinearProgress,
   Select,
   MenuItem,
   FormControl,
 } from '@mui/material'
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
-import { IconTrash, IconPlus } from '@tabler/icons-react'
+import { IconTrash, IconPlus, IconCalendarPlus, IconEdit } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import TransactionModal from '../components/modals/TransactionModal'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
@@ -34,6 +33,7 @@ interface Transaction {
   category_name: string
   budget_item_id: string | null
   budget_item_name: string | null
+  budget_group_name: string | null
   date: string
   description: string | null
   memo: string | null
@@ -41,8 +41,7 @@ interface Transaction {
 }
 
 interface BudgetSummary {
-  budget_item_id: string
-  budget_item_name: string
+  group_name: string
   budget_amount: number
   spent_amount: number
 }
@@ -50,6 +49,7 @@ interface BudgetSummary {
 interface BudgetItem {
   id: string
   name: string
+  group_name: string | null
 }
 
 export default function Transactions() {
@@ -64,6 +64,8 @@ export default function Transactions() {
   const [budgetItemModalOpen, setBudgetItemModalOpen] = useState(false)
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
+  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set())
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
   // 필터
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
@@ -85,6 +87,7 @@ export default function Transactions() {
   useEffect(() => {
     loadTransactions()
     loadBudgetSummaries()
+    setSelectedGroups(new Set()) // 월 변경 시 선택 초기화
   }, [selectedYear, selectedMonth, exchangeRate])
 
   useEffect(() => {
@@ -110,13 +113,34 @@ export default function Transactions() {
   const loadBudgetItems = async () => {
     try {
       const result = await window.electronAPI.db.query(
-        `SELECT id, name FROM budget_items WHERE is_active = 1 ORDER BY sort_order`
+        `SELECT id, name, group_name FROM budget_items WHERE is_active = 1 ORDER BY sort_order`
       )
       setBudgetItems(result as BudgetItem[])
     } catch (error) {
       console.error('Failed to load budget items:', error)
     }
   }
+
+  // 예산 그룹 선택 토글
+  const toggleGroupSelection = (groupName: string) => {
+    setSelectedGroups((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(groupName)) {
+        newSet.delete(groupName)
+      } else {
+        newSet.add(groupName)
+      }
+      return newSet
+    })
+  }
+
+  // 선택된 그룹에 따른 거래내역 필터링
+  const filteredTransactions = selectedGroups.size === 0
+    ? transactions
+    : transactions.filter((t) => {
+        const groupName = t.budget_group_name || '미분류'
+        return selectedGroups.has(groupName)
+      })
 
   // 해당 연도의 월별 데이터 존재 여부 조회
   const loadMonthsWithData = async () => {
@@ -152,7 +176,11 @@ export default function Transactions() {
           (SELECT bi.name FROM budget_item_categories bic
            JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
            WHERE bic.category_id = c.id
-           LIMIT 1) as budget_item_name
+           LIMIT 1) as budget_item_name,
+          (SELECT COALESCE(bi.group_name, '미분류') FROM budget_item_categories bic
+           JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
+           WHERE bic.category_id = c.id
+           LIMIT 1) as budget_group_name
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
         WHERE t.date >= ? AND t.date < ?
@@ -168,7 +196,7 @@ export default function Transactions() {
     }
   }
 
-  // 예산별 지출 집계 조회
+  // 예산 그룹별 지출 집계 조회
   const loadBudgetSummaries = async () => {
     try {
       const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
@@ -177,45 +205,95 @@ export default function Transactions() {
           ? `${selectedYear + 1}-01-01`
           : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
+      // 예산 그룹별로 집계 (group_name 기준)
       // 환율을 적용하여 모든 금액을 KRW로 환산
-      const query = `
+      // distributed 예산은 기간 기반 월 분배액 계산
+      // 지출은 그룹 내 모든 카테고리에서 DISTINCT하게 집계 (중복 방지)
+      const budgetQuery = `
         SELECT
-          bi.id as budget_item_id,
-          bi.name as budget_item_name,
-          CASE WHEN bi.currency = 'AED'
-            THEN COALESCE(mb.amount, bi.base_amount) * ?
-            ELSE COALESCE(mb.amount, bi.base_amount)
-          END as budget_amount,
-          COALESCE((
-            SELECT SUM(
-              CASE WHEN t.currency = 'AED'
-                THEN t.amount * ?
-                ELSE t.amount
-              END
-            )
-            FROM transactions t
-            JOIN budget_item_categories bic ON t.category_id = bic.category_id
-            WHERE bic.budget_item_id = bi.id
-              AND t.date >= ?
-              AND t.date < ?
-              AND t.type = 'expense'
-              AND t.include_in_stats = 1
-          ), 0) as spent_amount
+          COALESCE(bi.group_name, '미분류') as group_name,
+          SUM(
+            CASE
+              WHEN bi.budget_type = 'distributed' AND bi.valid_from IS NOT NULL AND bi.valid_to IS NOT NULL THEN
+                CASE WHEN bi.currency = 'AED'
+                  THEN ROUND(bi.base_amount / MAX(1, (
+                    (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
+                    (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
+                  ))) * ?
+                  ELSE ROUND(bi.base_amount / MAX(1, (
+                    (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
+                    (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
+                  )))
+                END
+              ELSE
+                CASE WHEN bi.currency = 'AED'
+                  THEN bi.base_amount * ?
+                  ELSE bi.base_amount
+                END
+            END
+          ) as budget_amount
         FROM budget_items bi
-        LEFT JOIN monthly_budgets mb ON bi.id = mb.budget_item_id
-          AND mb.year = ? AND mb.month = ?
         WHERE bi.is_active = 1
-        ORDER BY bi.sort_order
+          AND (
+            bi.budget_type != 'distributed'
+            OR (bi.valid_from < ? AND bi.valid_to >= ?)
+          )
+        GROUP BY COALESCE(bi.group_name, '미분류')
+        ORDER BY bi.group_name
       `
 
-      const result = await window.electronAPI.db.query(query, [
+      const budgetResult = await window.electronAPI.db.query(budgetQuery, [
         exchangeRate,
         exchangeRate,
+        endDate,
+        startDate,
+      ]) as { group_name: string; budget_amount: number }[]
+
+      // 그룹별 지출 집계 (그룹 내 모든 카테고리의 거래를 DISTINCT하게)
+      // 같은 거래가 여러 예산 항목에 연결된 카테고리에 있을 수 있으므로 거래 ID로 중복 제거
+      const spentQuery = `
+        SELECT
+          group_name,
+          COALESCE(SUM(amount_krw), 0) as spent_amount
+        FROM (
+          SELECT DISTINCT
+            t.id,
+            COALESCE(bi.group_name, '미분류') as group_name,
+            CASE WHEN t.currency = 'AED'
+              THEN t.amount * ?
+              ELSE t.amount
+            END as amount_krw
+          FROM transactions t
+          JOIN budget_item_categories bic ON t.category_id = bic.category_id
+          JOIN budget_items bi ON bic.budget_item_id = bi.id
+          WHERE bi.is_active = 1
+            AND (
+              bi.budget_type != 'distributed'
+              OR (bi.valid_from < ? AND bi.valid_to >= ?)
+            )
+            AND t.date >= ?
+            AND t.date < ?
+            AND t.type = 'expense'
+            AND t.include_in_stats = 1
+        )
+        GROUP BY group_name
+      `
+
+      const spentResult = await window.electronAPI.db.query(spentQuery, [
+        exchangeRate,
+        endDate,
+        startDate,
         startDate,
         endDate,
-        selectedYear,
-        selectedMonth,
-      ])
+      ]) as { group_name: string; spent_amount: number }[]
+
+      // 결과 병합
+      const spentMap = new Map(spentResult.map(r => [r.group_name, r.spent_amount]))
+      const result = budgetResult.map(b => ({
+        group_name: b.group_name,
+        budget_amount: b.budget_amount,
+        spent_amount: spentMap.get(b.group_name) || 0,
+      }))
       setBudgetSummaries(result as BudgetSummary[])
     } catch (error) {
       console.error('Failed to load budget summaries:', error)
@@ -298,6 +376,112 @@ export default function Transactions() {
       loadBudgetSummaries()
     }
     setPendingCategoryId(null)
+  }
+
+  // 분배 예산 거래 자동 생성
+  const generateDistributedTransactions = async () => {
+    try {
+      // 선택된 월의 첫째 날 (유효 기간 비교용)
+      const targetMonthStart = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
+      const targetMonthEnd = selectedMonth === 12
+        ? `${selectedYear + 1}-01-01`
+        : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
+
+      // 분배 예산 항목 조회 (유효 기간 내)
+      const distributedBudgets = (await window.electronAPI.db.query(`
+        SELECT
+          bi.id,
+          bi.name,
+          bi.budget_type,
+          bi.base_amount,
+          bi.currency,
+          bi.valid_from,
+          bi.valid_to,
+          (SELECT bic.category_id FROM budget_item_categories bic WHERE bic.budget_item_id = bi.id LIMIT 1) as category_id
+        FROM budget_items bi
+        WHERE bi.is_active = 1
+          AND bi.budget_type = 'distributed'
+          AND bi.valid_from IS NOT NULL
+          AND bi.valid_to IS NOT NULL
+          AND bi.valid_from < ?
+          AND bi.valid_to >= ?
+      `, [targetMonthEnd, targetMonthStart])) as {
+        id: string
+        name: string
+        budget_type: string
+        base_amount: number
+        currency: string
+        valid_from: string
+        valid_to: string
+        category_id: string | null
+      }[]
+
+      if (distributedBudgets.length === 0) {
+        alert('생성할 분배 예산 항목이 없습니다. (유효 기간 확인)')
+        return
+      }
+
+      // 이미 생성된 거래가 있는지 확인
+      const existingCount = (await window.electronAPI.db.get(`
+        SELECT COUNT(*) as count FROM transactions
+        WHERE date >= ? AND date < ?
+          AND description LIKE '[분배]%'
+      `, [targetMonthStart, targetMonthEnd])) as { count: number }
+
+      if (existingCount.count > 0) {
+        if (!confirm(`이미 ${existingCount.count}건의 분배 거래가 있습니다. 추가로 생성하시겠습니까?`)) {
+          return
+        }
+      }
+
+      // 거래 생성
+      const { v4: uuidv4 } = await import('uuid')
+      let createdCount = 0
+      let skippedCount = 0
+
+      // 월 수 계산 함수
+      const calcMonths = (from: string, to: string) => {
+        const fromDate = new Date(from)
+        const toDate = new Date(to)
+        const months = (toDate.getFullYear() - fromDate.getFullYear()) * 12 + (toDate.getMonth() - fromDate.getMonth()) + 1
+        return Math.max(1, months)
+      }
+
+      for (const budget of distributedBudgets) {
+        if (!budget.category_id) {
+          console.warn(`예산 항목 "${budget.name}"에 연결된 카테고리가 없습니다.`)
+          skippedCount++
+          continue
+        }
+
+        const months = calcMonths(budget.valid_from, budget.valid_to)
+        const monthlyAmount = Math.round(budget.base_amount / months)
+
+        await window.electronAPI.db.query(`
+          INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats)
+          VALUES (?, 'expense', ?, ?, ?, ?, ?, 1)
+        `, [
+          uuidv4(),
+          monthlyAmount,
+          budget.currency,
+          budget.category_id,
+          targetMonthStart,
+          `[분배] ${budget.name} (${months}개월)`
+        ])
+        createdCount++
+      }
+
+      const message = skippedCount > 0
+        ? `${createdCount}건의 분배 거래가 생성되었습니다. (${skippedCount}건 스킵: 카테고리 미연결)`
+        : `${createdCount}건의 분배 거래가 생성되었습니다.`
+      alert(message)
+      loadTransactions()
+      loadMonthsWithData()
+      loadBudgetSummaries()
+    } catch (error) {
+      console.error('Failed to generate distributed transactions:', error)
+      alert('분배 거래 생성에 실패했습니다.')
+    }
   }
 
   // DataGrid 컬럼 정의
@@ -420,19 +604,31 @@ export default function Transactions() {
     {
       field: 'actions',
       headerName: '',
-      width: 50,
+      width: 80,
       sortable: false,
       renderCell: (params: GridRenderCellParams<Transaction>) => (
-        <IconButton
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation()
-            setDeletingId(params.row.id)
-            setDeleteConfirmOpen(true)
-          }}
-        >
-          <IconTrash size={16} />
-        </IconButton>
+        <Stack direction="row" spacing={0.5}>
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditingTransaction(params.row)
+              setModalOpen(true)
+            }}
+          >
+            <IconEdit size={16} />
+          </IconButton>
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation()
+              setDeletingId(params.row.id)
+              setDeleteConfirmOpen(true)
+            }}
+          >
+            <IconTrash size={16} />
+          </IconButton>
+        </Stack>
       ),
     },
   ]
@@ -445,6 +641,16 @@ export default function Transactions() {
         onYearChange={setSelectedYear}
         onMonthChange={setSelectedMonth}
         monthsWithData={monthsWithData}
+        actionSlot={
+          <Button
+            size="small"
+            startIcon={<IconCalendarPlus size={16} />}
+            onClick={generateDistributedTransactions}
+            variant="outlined"
+          >
+            분배 거래 생성
+          </Button>
+        }
       />
 
       {/* 요약 */}
@@ -503,7 +709,7 @@ export default function Transactions() {
       {budgetSummaries.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-            예산별 지출
+            예산 그룹별 지출
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
             {budgetSummaries.map((budget) => {
@@ -515,12 +721,26 @@ export default function Transactions() {
               const overBudgetPercent = isOverBudget && budget.budget_amount > 0
                 ? Math.min((overAmount / budget.budget_amount) * 100, 50)
                 : 0
+              const isSelected = selectedGroups.has(budget.group_name)
               return (
-                <Card key={budget.budget_item_id}>
+                <Card
+                  key={budget.group_name}
+                  onClick={() => toggleGroupSelection(budget.group_name)}
+                  sx={{
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    border: 2,
+                    borderColor: isSelected ? 'primary.main' : 'transparent',
+                    bgcolor: isSelected ? 'primary.50' : 'background.paper',
+                    '&:hover': {
+                      borderColor: isSelected ? 'primary.main' : 'grey.300',
+                    },
+                  }}
+                >
                   <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                       <Typography variant="body1" fontWeight={600}>
-                        {budget.budget_item_name}
+                        {budget.group_name}
                       </Typography>
                       <Box
                         sx={{
@@ -572,7 +792,7 @@ export default function Transactions() {
 
       {/* 거래 목록 DataGrid */}
       <DataGrid
-        rows={transactions}
+        rows={filteredTransactions}
         columns={columns}
         loading={loading}
         disableRowSelectionOnClick
@@ -607,10 +827,14 @@ export default function Transactions() {
 
       <TransactionModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false)
+          setEditingTransaction(null)
+        }}
         onSaved={handleSaved}
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}
+        editTransaction={editingTransaction}
       />
 
       <BudgetItemModal
