@@ -15,6 +15,7 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       '@renderer': fileURLToPath(new URL('./src/renderer', import.meta.url)),
       '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
+      '@assets': fileURLToPath(new URL('./assets', import.meta.url)),
     },
   },
   server: {

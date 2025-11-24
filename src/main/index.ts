@@ -7,11 +7,17 @@ let mainWindow: BrowserWindow | null = null
 const isDev = process.env.NODE_ENV === 'development'
 
 function createWindow() {
+  // 아이콘 경로 설정
+  const iconPath = isDev
+    ? path.join(__dirname, '../../build/icon.png')
+    : path.join(__dirname, '../../build/icon.png')
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -39,6 +45,16 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // macOS Dock 아이콘 설정 (개발 모드에서만 - 프로덕션은 번들된 icns 사용)
+  if (isDev && process.platform === 'darwin' && app.dock) {
+    const iconPath = path.join(app.getAppPath(), 'build/icon.png')
+    try {
+      app.dock.setIcon(iconPath)
+    } catch (e) {
+      console.error('Failed to set dock icon:', e)
+    }
+  }
+
   initDatabase()
   createWindow()
 

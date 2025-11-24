@@ -58,6 +58,7 @@
   "build": {
     "appId": "com.richhome.app",
     "productName": "Rich Home",
+    "icon": "build/icon",
     "directories": {
       "output": "release"
     },
@@ -66,15 +67,24 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "zip"
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
       ]
     }
   }
