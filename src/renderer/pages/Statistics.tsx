@@ -14,6 +14,9 @@ import {
   MenuItem,
   Checkbox,
   FormControlLabel,
+  Tabs,
+  Tab,
+  LinearProgress,
 } from '@mui/material'
 import { IconArrowUpRight, IconArrowDownRight } from '@tabler/icons-react'
 import {
@@ -31,10 +34,13 @@ import {
   ComposedChart,
   Line,
   Treemap,
+  PieChart,
+  Pie,
 } from 'recharts'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import AmountText from '../components/shared/AmountText'
+import MonthNavigation from '../components/shared/MonthNavigation'
 
 interface MonthlyData {
   month: string
@@ -60,6 +66,26 @@ interface CategoryInfo {
   enabled: boolean
 }
 
+// 예산 항목 통계 인터페이스
+interface BudgetItemStat {
+  id: string
+  name: string
+  group_name: string | null
+  budget_type: string
+  budgetAmount: number  // 예산 금액 (KRW 환산)
+  spentAmount: number   // 실제 지출 (KRW 환산)
+  currency: string
+  categories: string[]
+}
+
+// 월간 카테고리별 통계 인터페이스
+interface MonthlyCategoryStat {
+  id: string
+  name: string
+  amount: number
+  color: string
+}
+
 // 카테고리별 색상 팔레트
 const CATEGORY_COLORS = [
   '#5D87FF', '#13DEB9', '#FFAE1F', '#FA896B', '#49BEFF',
@@ -69,27 +95,39 @@ const CATEGORY_COLORS = [
 
 export default function Statistics() {
   const { setPageTitle, setOnAdd } = usePageContext()
+
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState(0)
+
+  // 공통 상태
   const [loading, setLoading] = useState(true)
+  const [exchangeRate, setExchangeRate] = useState(385)
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const months = Array.from({ length: 12 }, (_, i) => i + 1)
+
+  // ===== 연간 통계 관련 상태 =====
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([])
   const [excludedItems, setExcludedItems] = useState<{ month: string; [key: string]: number | string }[]>([])
-  const [excludedCategories, setExcludedCategories] = useState<string[]>([])
   const [excludedItemList, setExcludedItemList] = useState<{ name: string; total: number; color: string; enabled: boolean }[]>([])
   const [viewType, setViewType] = useState<'flow' | 'bar'>('flow')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-
-  // 카테고리별 지출 분석
+  // 카테고리별 지출 분석 (연간)
   const [treemapData, setTreemapData] = useState<TreemapData[]>([])
   const [categoryList, setCategoryList] = useState<CategoryInfo[]>([])
-  const [exchangeRate, setExchangeRate] = useState(385)
-
   // 기간 범위 선택
   const [dateRangeType, setDateRangeType] = useState<'all' | 'custom'>('custom')
   const [fromYear, setFromYear] = useState(new Date().getFullYear())
   const [fromMonth, setFromMonth] = useState(1)
   const [toYear, setToYear] = useState(new Date().getFullYear())
   const [toMonth, setToMonth] = useState(new Date().getMonth() + 1)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
-  const months = Array.from({ length: 12 }, (_, i) => i + 1)
+
+  // ===== 월간 통계 관련 상태 =====
+  const [monthlySelectedYear, setMonthlySelectedYear] = useState(new Date().getFullYear())
+  const [monthlySelectedMonth, setMonthlySelectedMonth] = useState(new Date().getMonth() + 1)
+  const [budgetItemStats, setBudgetItemStats] = useState<BudgetItemStat[]>([])
+  const [monthlyLoading, setMonthlyLoading] = useState(false)
+  const [monthlyCategoryStats, setMonthlyCategoryStats] = useState<MonthlyCategoryStat[]>([])
+  const [monthsWithData, setMonthsWithData] = useState<number[]>([])
 
   useEffect(() => {
     setPageTitle('통계')
@@ -230,8 +268,6 @@ export default function Statistics() {
       // 총계 기준 정렬 후 항목 목록 생성
       const sortedItems = Array.from(itemTotals.entries())
         .sort((a, b) => b[1] - a[1])
-      const items = sortedItems.map(([name]) => name)
-      setExcludedCategories(items)
 
       // 기존 enabled 상태 유지
       const existingEnabledMap = new Map(excludedItemList.map(item => [item.name, item.enabled]))
@@ -366,9 +402,179 @@ export default function Statistics() {
     ))
   }
 
-  const handleToggleAll = (enabled: boolean) => {
-    setCategoryList(prev => prev.map(cat => ({ ...cat, enabled })))
+  // ===== 월간 통계 관련 함수들 =====
+
+  // 월간 통계 useEffect
+  useEffect(() => {
+    if (activeTab === 0) {
+      loadMonthlyStatsData()
+    }
+  }, [activeTab, monthlySelectedYear, monthlySelectedMonth, exchangeRate])
+
+  // 월간 데이터가 있는 월 목록 로드
+  useEffect(() => {
+    loadMonthsWithData()
+  }, [monthlySelectedYear])
+
+  const loadMonthsWithData = async () => {
+    try {
+      const result = await window.electronAPI.db.query(`
+        SELECT DISTINCT CAST(strftime('%m', date) AS INTEGER) as month
+        FROM transactions
+        WHERE strftime('%Y', date) = ?
+          AND include_in_stats = 1
+        ORDER BY month
+      `, [String(monthlySelectedYear)]) as { month: number }[]
+      setMonthsWithData(result.map(r => r.month))
+    } catch (error) {
+      console.error('Failed to load months with data:', error)
+    }
   }
+
+  const loadMonthlyStatsData = async () => {
+    setMonthlyLoading(true)
+    try {
+      const startDate = `${monthlySelectedYear}-${String(monthlySelectedMonth).padStart(2, '0')}-01`
+      const endMonth = monthlySelectedMonth === 12 ? 1 : monthlySelectedMonth + 1
+      const endYear = monthlySelectedMonth === 12 ? monthlySelectedYear + 1 : monthlySelectedYear
+      const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`
+
+      // 1. 예산 항목 목록 조회
+      const budgetItems = await window.electronAPI.db.query(`
+        SELECT bi.id, bi.name, bi.group_name, bi.budget_type, bi.base_amount, bi.currency,
+               bi.valid_from, bi.valid_to,
+               GROUP_CONCAT(bic.category_id) as category_ids,
+               GROUP_CONCAT(c.name) as category_names
+        FROM budget_items bi
+        LEFT JOIN budget_item_categories bic ON bi.id = bic.budget_item_id
+        LEFT JOIN categories c ON bic.category_id = c.id
+        WHERE bi.is_active = 1
+        GROUP BY bi.id
+        ORDER BY bi.group_name, bi.sort_order, bi.name
+      `) as {
+        id: string
+        name: string
+        group_name: string | null
+        budget_type: string
+        base_amount: number
+        currency: string
+        valid_from: string | null
+        valid_to: string | null
+        category_ids: string | null
+        category_names: string | null
+      }[]
+
+      // 2. 해당 월의 카테고리별 지출 집계
+      const categoryExpenses = await window.electronAPI.db.query(`
+        SELECT
+          category_id,
+          currency,
+          SUM(amount) as total
+        FROM transactions
+        WHERE type = 'expense'
+          AND include_in_stats = 1
+          AND date >= ? AND date < ?
+        GROUP BY category_id, currency
+      `, [startDate, endDate]) as {
+        category_id: string
+        currency: string
+        total: number
+      }[]
+
+      // 카테고리별 지출 맵 (KRW 환산)
+      const categoryExpenseMap = new Map<string, number>()
+      categoryExpenses.forEach(exp => {
+        const amountKRW = exp.currency === 'AED' ? exp.total * exchangeRate : exp.total
+        categoryExpenseMap.set(
+          exp.category_id,
+          (categoryExpenseMap.get(exp.category_id) || 0) + amountKRW
+        )
+      })
+
+      // 3. 예산 항목별 통계 계산
+      const stats: BudgetItemStat[] = budgetItems.map(item => {
+        // 월 예산 금액 계산
+        let budgetAmount = item.base_amount
+        if (item.budget_type === 'distributed' && item.valid_from && item.valid_to) {
+          const from = new Date(item.valid_from)
+          const to = new Date(item.valid_to)
+          const monthCount = Math.max(1,
+            (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
+          )
+          budgetAmount = item.base_amount / monthCount
+        }
+
+        // KRW 환산
+        const budgetAmountKRW = item.currency === 'AED' ? budgetAmount * exchangeRate : budgetAmount
+
+        // 연결된 카테고리들의 지출 합계
+        const categoryIds = item.category_ids ? item.category_ids.split(',') : []
+        const spentAmount = categoryIds.reduce((sum, catId) => {
+          return sum + (categoryExpenseMap.get(catId) || 0)
+        }, 0)
+
+        return {
+          id: item.id,
+          name: item.name,
+          group_name: item.group_name,
+          budget_type: item.budget_type,
+          budgetAmount: Math.round(budgetAmountKRW),
+          spentAmount: Math.round(spentAmount),
+          currency: item.currency,
+          categories: item.category_names ? item.category_names.split(',') : [],
+        }
+      })
+
+      setBudgetItemStats(stats)
+
+      // 4. 카테고리별 지출 통계
+      const categoryStats = await window.electronAPI.db.query(`
+        SELECT
+          c.id,
+          c.name,
+          t.currency,
+          SUM(t.amount) as total
+        FROM transactions t
+        JOIN categories c ON t.category_id = c.id
+        WHERE t.type = 'expense'
+          AND t.include_in_stats = 1
+          AND t.date >= ? AND t.date < ?
+        GROUP BY c.id, t.currency
+        ORDER BY total DESC
+      `, [startDate, endDate]) as {
+        id: string
+        name: string
+        currency: string
+        total: number
+      }[]
+
+      // 카테고리별 합산 (KRW)
+      const catTotals = new Map<string, { id: string; name: string; total: number }>()
+      categoryStats.forEach(stat => {
+        const amountKRW = stat.currency === 'AED' ? stat.total * exchangeRate : stat.total
+        const existing = catTotals.get(stat.id) || { id: stat.id, name: stat.name, total: 0 }
+        existing.total += amountKRW
+        catTotals.set(stat.id, existing)
+      })
+
+      const sortedCatStats: MonthlyCategoryStat[] = Array.from(catTotals.values())
+        .sort((a, b) => b.total - a.total)
+        .map((cat, index) => ({
+          id: cat.id,
+          name: cat.name,
+          amount: Math.round(cat.total),
+          color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        }))
+
+      setMonthlyCategoryStats(sortedCatStats)
+    } catch (error) {
+      console.error('Failed to load monthly stats data:', error)
+    } finally {
+      setMonthlyLoading(false)
+    }
+  }
+
+  // ===== 연간 통계 관련 계산 =====
 
   // 현재까지의 총계
   const totalIncome = monthlyData.reduce((sum, d) => sum + d.income, 0)
@@ -376,7 +582,6 @@ export default function Statistics() {
   const totalBalance = totalIncome - totalExpense
 
   // 전월 대비 변화율 (최근 데이터 있는 달 기준)
-  const currentMonth = new Date().getMonth() + 1
   const lastMonthWithData = monthlyData
     .filter(d => d.income > 0 || d.expense > 0)
     .slice(-1)[0]
@@ -430,7 +635,11 @@ export default function Statistics() {
     return null
   }
 
-  if (loading) {
+  // 월간 예산 합계
+  const totalMonthlyBudget = budgetItemStats.reduce((sum, item) => sum + item.budgetAmount, 0)
+  const totalMonthlySpent = budgetItemStats.reduce((sum, item) => sum + item.spentAmount, 0)
+
+  if (loading && activeTab === 1) {
     return (
       <Box>
         <Typography>로딩 중...</Typography>
@@ -440,24 +649,247 @@ export default function Statistics() {
 
   return (
     <Box>
-      {/* 연도 선택 */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h4" fontWeight={700}>
-          {selectedYear}년 통계
-        </Typography>
-        <ToggleButtonGroup
-          value={selectedYear}
-          exclusive
-          onChange={(_, value) => value && setSelectedYear(value)}
-          size="small"
+      {/* 탭 네비게이션 */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          aria-label="통계 탭"
         >
-          {[selectedYear - 1, selectedYear, selectedYear + 1].map((year) => (
-            <ToggleButton key={year} value={year} sx={{ px: 2 }}>
-              {year}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      </Stack>
+          <Tab label="월간 통계" />
+          <Tab label="연간 통계" />
+        </Tabs>
+      </Box>
+
+      {/* 월간 통계 탭 */}
+      {activeTab === 0 && (
+        <Box>
+          {/* 월 선택 네비게이션 */}
+          <MonthNavigation
+            selectedYear={monthlySelectedYear}
+            selectedMonth={monthlySelectedMonth}
+            onYearChange={setMonthlySelectedYear}
+            onMonthChange={setMonthlySelectedMonth}
+            monthsWithData={new Set(monthsWithData)}
+          />
+
+          {monthlyLoading ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <Typography>로딩 중...</Typography>
+            </Box>
+          ) : (
+            <>
+              {/* 예산 항목별 통계 */}
+              <DashboardCard title="예산 항목별 통계">
+                {budgetItemStats.length === 0 ? (
+                  <Typography color="textSecondary" textAlign="center" py={4}>
+                    예산 항목이 없습니다.
+                  </Typography>
+                ) : (
+                  <>
+                    {/* 총계 요약 */}
+                    <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+                      <Card sx={{ flex: 1, bgcolor: 'primary.lighter' }}>
+                        <CardContent sx={{ py: 2 }}>
+                          <Typography variant="body2" color="textSecondary">총 예산</Typography>
+                          <AmountText amount={totalMonthlyBudget} currency="KRW" variant="h5" fontWeight={600} />
+                        </CardContent>
+                      </Card>
+                      <Card sx={{ flex: 1, bgcolor: totalMonthlySpent <= totalMonthlyBudget ? 'success.lighter' : 'error.lighter' }}>
+                        <CardContent sx={{ py: 2 }}>
+                          <Typography variant="body2" color="textSecondary">총 지출</Typography>
+                          <AmountText
+                            amount={totalMonthlySpent}
+                            currency="KRW"
+                            variant="h5"
+                            fontWeight={600}
+                            color={totalMonthlySpent <= totalMonthlyBudget ? 'success.main' : 'error.main'}
+                          />
+                        </CardContent>
+                      </Card>
+                      <Card sx={{ flex: 1 }}>
+                        <CardContent sx={{ py: 2 }}>
+                          <Typography variant="body2" color="textSecondary">잔여</Typography>
+                          <AmountText
+                            amount={totalMonthlyBudget - totalMonthlySpent}
+                            currency="KRW"
+                            variant="h5"
+                            fontWeight={600}
+                            color={totalMonthlyBudget - totalMonthlySpent >= 0 ? 'success.main' : 'error.main'}
+                            showSign
+                          />
+                        </CardContent>
+                      </Card>
+                    </Stack>
+
+                    {/* 예산 항목 리스트 */}
+                    <Stack spacing={2}>
+                      {budgetItemStats.map((item) => {
+                        const percentage = item.budgetAmount > 0 ? Math.min((item.spentAmount / item.budgetAmount) * 100, 150) : 0
+                        const isOverBudget = item.spentAmount > item.budgetAmount
+
+                        return (
+                          <Card key={item.id} variant="outlined">
+                            <CardContent sx={{ py: 2 }}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Typography fontWeight={600}>{item.name}</Typography>
+                                  {item.group_name && (
+                                    <Chip label={item.group_name} size="small" variant="outlined" />
+                                  )}
+                                </Stack>
+                                <Stack direction="row" spacing={2} alignItems="center">
+                                  <Stack direction="row" spacing={0.5} alignItems="baseline">
+                                    <Typography variant="body2" color="textSecondary">예산:</Typography>
+                                    <AmountText amount={item.budgetAmount} currency="KRW" variant="body2" />
+                                  </Stack>
+                                  <Stack direction="row" spacing={0.5} alignItems="baseline">
+                                    <Typography variant="body2" fontWeight={600} color={isOverBudget ? 'error.main' : 'success.main'}>지출:</Typography>
+                                    <AmountText amount={item.spentAmount} currency="KRW" variant="body2" fontWeight={600} color={isOverBudget ? 'error.main' : 'success.main'} />
+                                  </Stack>
+                                </Stack>
+                              </Stack>
+                              <Box sx={{ position: 'relative' }}>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={Math.min(percentage, 100)}
+                                  sx={{
+                                    height: 10,
+                                    borderRadius: 5,
+                                    bgcolor: 'grey.200',
+                                    '& .MuiLinearProgress-bar': {
+                                      bgcolor: isOverBudget ? 'error.main' : percentage > 80 ? 'warning.main' : 'success.main',
+                                    },
+                                  }}
+                                />
+                                {isOverBudget && (
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      right: 0,
+                                      top: 0,
+                                      height: '100%',
+                                      width: `${Math.min((percentage - 100) / 0.5, 50)}%`,
+                                      bgcolor: 'error.light',
+                                      borderRadius: '0 5px 5px 0',
+                                      opacity: 0.5,
+                                    }}
+                                  />
+                                )}
+                              </Box>
+                              <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                                <Typography variant="caption" color="textSecondary">
+                                  {item.categories.length > 0 ? item.categories.join(', ') : '연결된 카테고리 없음'}
+                                </Typography>
+                                <Typography variant="caption" fontWeight={500} color={isOverBudget ? 'error.main' : 'textSecondary'}>
+                                  {percentage.toFixed(0)}%
+                                </Typography>
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </Stack>
+                  </>
+                )}
+              </DashboardCard>
+
+              {/* 카테고리별 통계 */}
+              <Box sx={{ mt: 3 }}>
+                <DashboardCard title="카테고리별 지출">
+                  {monthlyCategoryStats.length === 0 ? (
+                    <Typography color="textSecondary" textAlign="center" py={4}>
+                      해당 월의 지출 데이터가 없습니다.
+                    </Typography>
+                  ) : (
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+                      {/* 파이 차트 */}
+                      <Box sx={{ flex: 1, height: 300 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={monthlyCategoryStats}
+                              dataKey="amount"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={2}
+                            >
+                              {monthlyCategoryStats.map((entry, index) => (
+                                <Cell key={entry.id} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: number) => [`${value.toLocaleString()}원`, '']}
+                            />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </Box>
+
+                      {/* 카테고리 목록 */}
+                      <Box sx={{ flex: 1, minWidth: 250 }}>
+                        <Stack spacing={1}>
+                          {monthlyCategoryStats.map((cat, index) => (
+                            <Stack key={cat.id} direction="row" alignItems="center" justifyContent="space-between">
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <Box
+                                  sx={{
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: '2px',
+                                    bgcolor: cat.color,
+                                  }}
+                                />
+                                <Typography variant="body2">{cat.name}</Typography>
+                              </Stack>
+                              <Typography variant="body2" fontWeight={500}>
+                                {cat.amount.toLocaleString()}원
+                              </Typography>
+                            </Stack>
+                          ))}
+                        </Stack>
+                        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                          <Stack direction="row" justifyContent="space-between">
+                            <Typography variant="body2" fontWeight={600}>합계</Typography>
+                            <Typography variant="body2" fontWeight={600} color="primary.main">
+                              {monthlyCategoryStats.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}원
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      </Box>
+                    </Stack>
+                  )}
+                </DashboardCard>
+              </Box>
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* 연간 통계 탭 */}
+      {activeTab === 1 && (
+        <Box>
+          {/* 연도 선택 */}
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+            <Typography variant="h4" fontWeight={700}>
+              {selectedYear}년 통계
+            </Typography>
+            <ToggleButtonGroup
+              value={selectedYear}
+              exclusive
+              onChange={(_, value) => value && setSelectedYear(value)}
+              size="small"
+            >
+              {[selectedYear - 1, selectedYear, selectedYear + 1].map((year) => (
+                <ToggleButton key={year} value={year} sx={{ px: 2 }}>
+                  {year}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Stack>
 
       {/* 요약 카드 */}
       <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
@@ -660,7 +1092,8 @@ export default function Statistics() {
 
       {/* 통계 제외 항목 지출 흐름 (항목별) */}
       {excludedItemList.length > 0 && (
-        <DashboardCard title="통계 제외 항목 지출 흐름" sx={{ mt: 3 }}>
+        <Box sx={{ mt: 3 }}>
+        <DashboardCard title="통계 제외 항목 지출 흐름">
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
             {/* 차트 */}
             <Box sx={{ flex: 2, height: 380 }}>
@@ -766,10 +1199,12 @@ export default function Statistics() {
             </Box>
           </Stack>
         </DashboardCard>
+        </Box>
       )}
 
       {/* 월별 상세 테이블 */}
-      <DashboardCard title="월별 상세" sx={{ mt: 3 }}>
+      <Box sx={{ mt: 3 }}>
+      <DashboardCard title="월별 상세">
         <Box sx={{ overflowX: 'auto' }}>
           <Stack
             direction="row"
@@ -863,9 +1298,11 @@ export default function Statistics() {
           </Stack>
         </Box>
       </DashboardCard>
+      </Box>
 
       {/* 카테고리별 지출 분석 */}
-      <DashboardCard title="카테고리별 지출 분석" sx={{ mt: 3 }}>
+      <Box sx={{ mt: 3 }}>
+      <DashboardCard title="카테고리별 지출 분석">
         {/* 기간 선택 */}
         <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }} flexWrap="wrap">
           <ToggleButtonGroup
@@ -1055,6 +1492,9 @@ export default function Statistics() {
           </Typography>
         )}
       </DashboardCard>
+      </Box>
+        </Box>
+      )}
     </Box>
   )
 }

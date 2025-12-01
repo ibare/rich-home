@@ -54,8 +54,8 @@ src/
 │   │   ├── Transactions.tsx
 │   │   ├── Budget.tsx
 │   │   ├── Statistics.tsx
-│   │   ├── MonthlyClosing.tsx
 │   │   ├── Accounts.tsx
+│   │   ├── AccountBalanceHistory.tsx
 │   │   ├── Assets.tsx
 │   │   ├── Liabilities.tsx
 │   │   ├── Categories.tsx
@@ -100,11 +100,12 @@ const totalKRW = items.reduce((sum, item) => {
 
 - **accounts**: Bank accounts with owner (self/spouse/child), type, currency
 - **account_balances**: Balance history snapshots
-- **transactions**: Income/expense records with category_id, date, currency
+- **transactions**: Income/expense records with category_id, date, currency, include_in_stats flag
 - **categories**: Income/expense categories with expense_type (fixed/variable)
-- **budget_items**: Budget templates with budget_type (fixed_monthly, variable_monthly, annual, quarterly)
+- **budget_items**: Budget templates with budget_type (fixed_monthly, variable_monthly, distributed)
+  - `distributed` type uses `valid_from` and `valid_to` for date-based budget distribution
+  - Budget items can be grouped via `group_name` for aggregated spending tracking
 - **budget_item_categories**: M:N mapping between budget items and categories
-- **monthly_budgets**: Monthly budget snapshots
 - **assets**: Real estate and stocks
 - **liabilities**: Loans and debts
 - **settings**: Key-value configuration (exchange_rate, etc.)
@@ -125,6 +126,13 @@ To add a new migration:
 - **Data loading**: Pages typically load data in `useEffect` based on selected year/month
 - **Amount display**: Use `<AmountText>` component for consistent currency formatting
 - **Month navigation**: Use `<MonthNavigation>` component for year/month selection with data indicators
+
+## Database Bundling
+
+The app bundles a default database file (`data/rich-home.db`) which is copied to the user's data directory on first run. This is configured in `package.json` under `build.extraResources`.
+
+- Development: Uses `data/rich-home.db` in project root
+- Production: Copies from `resources/data/rich-home.db` to user data directory
 
 ## Language
 
