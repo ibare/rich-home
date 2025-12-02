@@ -67,9 +67,21 @@ export default function Transactions() {
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set())
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
-  // 필터
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
+  // 필터 - localStorage에서 마지막 선택한 년월 불러오기
+  const [selectedYear, setSelectedYear] = useState(() => {
+    const saved = localStorage.getItem('transactions_selected_year')
+    return saved ? parseInt(saved, 10) : new Date().getFullYear()
+  })
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const saved = localStorage.getItem('transactions_selected_month')
+    return saved ? parseInt(saved, 10) : new Date().getMonth() + 1
+  })
+
+  // 년월 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('transactions_selected_year', String(selectedYear))
+    localStorage.setItem('transactions_selected_month', String(selectedMonth))
+  }, [selectedYear, selectedMonth])
 
   // 월별 데이터 존재 여부
   const [monthsWithData, setMonthsWithData] = useState<Set<number>>(new Set())

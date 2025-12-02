@@ -18,6 +18,8 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Tabs,
+  Tab,
 } from '@mui/material'
 import {
   IconEdit,
@@ -47,6 +49,8 @@ const budgetTypeLabels: Record<string, string> = {
   distributed: '분배',
 }
 
+const UNGROUPED_TAB = '__ungrouped__'
+
 export default function Budget() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([])
@@ -55,6 +59,7 @@ export default function Budget() {
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingItem, setDeletingItem] = useState<BudgetItem | null>(null)
+  const [selectedTab, setSelectedTab] = useState<string>(UNGROUPED_TAB)
 
   // 환율
   const [exchangeRate, setExchangeRate] = useState(385)
@@ -154,8 +159,26 @@ export default function Budget() {
     setEditingItem(null)
   }
 
+  // 그룹 목록 계산
+  const groups = [...new Set(budgetItems.map((item) => item.group_name).filter(Boolean))] as string[]
+  const hasUngrouped = budgetItems.some((item) => !item.group_name)
+
+  // 선택된 탭에 따라 필터링된 예산 항목
+  const filteredItems = budgetItems.filter((item) => {
+    if (selectedTab === UNGROUPED_TAB) {
+      return !item.group_name
+    }
+    return item.group_name === selectedTab
+  })
+
   // 총 월 예산 계산
   const totalMonthlyBudget = budgetItems.reduce((sum, item) => {
+    const monthlyAmount = getMonthlyAmount(item)
+    return sum + (item.currency === 'AED' ? monthlyAmount * exchangeRate : monthlyAmount)
+  }, 0)
+
+  // 현재 탭의 월 예산 계산
+  const tabMonthlyBudget = filteredItems.reduce((sum, item) => {
     const monthlyAmount = getMonthlyAmount(item)
     return sum + (item.currency === 'AED' ? monthlyAmount * exchangeRate : monthlyAmount)
   }, 0)
@@ -198,11 +221,43 @@ export default function Budget() {
         </Card>
       ) : (
         <Card>
+          {/* 그룹 탭 */}
+          <Tabs
+            value={selectedTab}
+            onChange={(_, value) => setSelectedTab(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
+          >
+            {hasUngrouped && (
+              <Tab
+                label={`비그룹 (${budgetItems.filter((i) => !i.group_name).length})`}
+                value={UNGROUPED_TAB}
+              />
+            )}
+            {groups.map((group) => (
+              <Tab
+                key={group}
+                label={`${group} (${budgetItems.filter((i) => i.group_name === group).length})`}
+                value={group}
+              />
+            ))}
+          </Tabs>
+
+          {/* 탭별 예산 합계 */}
+          <Box sx={{ px: 3, py: 1.5, bgcolor: 'action.hover' }}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography variant="body2" color="textSecondary">
+                {selectedTab === UNGROUPED_TAB ? '비그룹' : selectedTab} 월 예산:
+              </Typography>
+              <AmountText amount={tabMonthlyBudget} currency="KRW" fontWeight={600} />
+            </Stack>
+          </Box>
+
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>그룹</TableCell>
                   <TableCell>예산 항목</TableCell>
                   <TableCell>유형</TableCell>
                   <TableCell>연결 카테고리</TableCell>
@@ -212,25 +267,8 @@ export default function Budget() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {budgetItems.map((item) => (
+                {filteredItems.map((item) => (
                     <TableRow key={item.id} hover>
-                      <TableCell>
-                        {item.group_name ? (
-                          <Chip
-                            label={item.group_name}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                        ) : (
-                          <Chip
-                            label="미분류"
-                            size="small"
-                            color="default"
-                            variant="outlined"
-                          />
-                        )}
-                      </TableCell>
                       <TableCell>
                         <Typography fontWeight={500}>{item.name}</Typography>
                         {item.memo && (

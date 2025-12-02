@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -13,6 +13,7 @@ import {
 import { IconCircleFilled } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
+import CategoryModal from '../components/modals/CategoryModal'
 
 interface Category {
   id: string
@@ -23,18 +24,31 @@ interface Category {
   icon: string
   is_active: number
   sort_order: number
+  budget_item_names: string | null
 }
 
 export default function Categories() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+
+  const handleOpenAdd = useCallback(() => {
+    setEditingCategory(null)
+    setModalOpen(true)
+  }, [])
+
+  const handleOpenEdit = useCallback((category: Category) => {
+    setEditingCategory(category)
+    setModalOpen(true)
+  }, [])
 
   useEffect(() => {
     setPageTitle('카테고리')
-    setOnAdd(null) // 카테고리 추가 기능은 나중에 구현
+    setOnAdd(handleOpenAdd)
     return () => setOnAdd(null)
-  }, [setPageTitle, setOnAdd])
+  }, [setPageTitle, setOnAdd, handleOpenAdd])
 
   useEffect(() => {
     loadCategories()
@@ -42,9 +56,15 @@ export default function Categories() {
 
   const loadCategories = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        'SELECT * FROM categories WHERE is_active = 1 ORDER BY type, expense_type, sort_order'
-      )
+      const result = await window.electronAPI.db.query(`
+        SELECT c.*, GROUP_CONCAT(bi.name, ', ') as budget_item_names
+        FROM categories c
+        LEFT JOIN budget_item_categories bic ON c.id = bic.category_id
+        LEFT JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
+        WHERE c.is_active = 1
+        GROUP BY c.id
+        ORDER BY c.type, c.expense_type, c.sort_order
+      `)
       setCategories(result as Category[])
     } catch (error) {
       console.error('Failed to load categories:', error)
@@ -111,18 +131,24 @@ export default function Categories() {
               {incomeCategories.map((cat) => (
                 <ListItem
                   key={cat.id}
+                  onClick={() => handleOpenEdit(cat)}
                   sx={{
                     py: 1,
                     px: 2,
                     mb: 0.5,
                     borderRadius: 1,
+                    cursor: 'pointer',
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 32 }}>
                     <IconCircleFilled size={12} style={{ color: cat.color }} />
                   </ListItemIcon>
-                  <ListItemText primary={cat.name} />
+                  <ListItemText
+                    primary={cat.name}
+                    secondary={cat.budget_item_names}
+                    secondaryTypographyProps={{ variant: 'caption', sx: { opacity: 0.5 } }}
+                  />
                 </ListItem>
               ))}
             </List>
@@ -155,18 +181,24 @@ export default function Categories() {
                   {fixedExpenseCategories.map((cat) => (
                     <ListItem
                       key={cat.id}
+                      onClick={() => handleOpenEdit(cat)}
                       sx={{
                         py: 1,
                         px: 2,
                         mb: 0.5,
                         borderRadius: 1,
+                        cursor: 'pointer',
                         '&:hover': { bgcolor: 'action.hover' },
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         <IconCircleFilled size={12} style={{ color: cat.color }} />
                       </ListItemIcon>
-                      <ListItemText primary={cat.name} />
+                      <ListItemText
+                        primary={cat.name}
+                        secondary={cat.budget_item_names}
+                        secondaryTypographyProps={{ variant: 'caption', sx: { opacity: 0.5 } }}
+                      />
                     </ListItem>
                   ))}
                 </List>
@@ -187,18 +219,24 @@ export default function Categories() {
                   {variableExpenseCategories.map((cat) => (
                     <ListItem
                       key={cat.id}
+                      onClick={() => handleOpenEdit(cat)}
                       sx={{
                         py: 1,
                         px: 2,
                         mb: 0.5,
                         borderRadius: 1,
+                        cursor: 'pointer',
                         '&:hover': { bgcolor: 'action.hover' },
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         <IconCircleFilled size={12} style={{ color: cat.color }} />
                       </ListItemIcon>
-                      <ListItemText primary={cat.name} />
+                      <ListItemText
+                        primary={cat.name}
+                        secondary={cat.budget_item_names}
+                        secondaryTypographyProps={{ variant: 'caption', sx: { opacity: 0.5 } }}
+                      />
                     </ListItem>
                   ))}
                 </List>
@@ -207,6 +245,13 @@ export default function Categories() {
           </DashboardCard>
         </Box>
       </Stack>
+
+      <CategoryModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={loadCategories}
+        editingCategory={editingCategory}
+      />
     </Box>
   )
 }
