@@ -15,9 +15,9 @@
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
-    "publish": "npm run build && dotenv electron-builder --publish always",
-    "publish:mac": "npm run build && dotenv electron-builder --mac --publish always",
-    "publish:win": "npm run build && dotenv electron-builder --win --publish always",
+    "publish": "npm run build && dotenv -e .env -- electron-builder --publish always",
+    "publish:mac": "npm run build && dotenv -e .env -- electron-builder --mac --publish always",
+    "publish:win": "npm run build && dotenv -e .env -- electron-builder --win --publish always",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
   },
   "keywords": [
