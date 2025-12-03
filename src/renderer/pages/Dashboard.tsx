@@ -16,6 +16,7 @@ import {
   IconHome,
   IconCreditCard,
 } from '@tabler/icons-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import AmountText from '../components/shared/AmountText'
@@ -37,6 +38,12 @@ interface CategoryExpense {
   color: string
 }
 
+interface MonthlyBudgetComparison {
+  month: string
+  budget: number
+  expense: number
+}
+
 interface DashboardData {
   // 자산 현황
   totalAccountBalance: number
@@ -55,6 +62,9 @@ interface DashboardData {
   // 카테고리별 지출
   categoryExpenses: CategoryExpense[]
 
+  // 최근 3개월 예산 비교
+  monthlyBudgetComparison: MonthlyBudgetComparison[]
+
   // 환율
   exchangeRate: number
 }
@@ -72,6 +82,7 @@ export default function Dashboard() {
     monthlyBudget: 0,
     recentTransactions: [],
     categoryExpenses: [],
+    monthlyBudgetComparison: [],
     exchangeRate: 370,
   })
 
@@ -225,6 +236,59 @@ export default function Dashboard() {
         LIMIT 5
       `, [exchangeRate, startDate, endDate])) as CategoryExpense[]
 
+      // 최근 3개월 예산 vs 지출 비교
+      const monthlyBudgetComparison: MonthlyBudgetComparison[] = []
+      for (let i = 2; i >= 0; i--) {
+        const targetDate = new Date(year, month - 1 - i, 1)
+        const targetYear = targetDate.getFullYear()
+        const targetMonth = targetDate.getMonth() + 1
+        const targetStartDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
+        const targetEndDate = targetMonth === 12
+          ? `${targetYear + 1}-01-01`
+          : `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-01`
+
+        // 해당 월 예산
+        const budgetResult = (await window.electronAPI.db.query(`
+          SELECT
+            SUM(
+              CASE
+                WHEN budget_type = 'distributed' AND valid_from IS NOT NULL AND valid_to IS NOT NULL THEN
+                  CASE WHEN currency = 'AED'
+                    THEN ROUND(base_amount / MAX(1, (
+                      (CAST(strftime('%Y', valid_to) AS INTEGER) - CAST(strftime('%Y', valid_from) AS INTEGER)) * 12 +
+                      (CAST(strftime('%m', valid_to) AS INTEGER) - CAST(strftime('%m', valid_from) AS INTEGER)) + 1
+                    ))) * ?
+                    ELSE ROUND(base_amount / MAX(1, (
+                      (CAST(strftime('%Y', valid_to) AS INTEGER) - CAST(strftime('%Y', valid_from) AS INTEGER)) * 12 +
+                      (CAST(strftime('%m', valid_to) AS INTEGER) - CAST(strftime('%m', valid_from) AS INTEGER)) + 1
+                    )))
+                  END
+                ELSE
+                  CASE WHEN currency = 'AED' THEN base_amount * ? ELSE base_amount END
+              END
+            ) as total_budget
+          FROM budget_items
+          WHERE is_active = 1
+            AND (
+              budget_type != 'distributed'
+              OR (valid_from < ? AND valid_to >= ?)
+            )
+        `, [exchangeRate, exchangeRate, targetEndDate, targetStartDate])) as { total_budget: number | null }[]
+
+        // 해당 월 지출
+        const expenseResult = (await window.electronAPI.db.query(`
+          SELECT SUM(CASE WHEN currency = 'AED' THEN amount * ? ELSE amount END) as total_expense
+          FROM transactions
+          WHERE type = 'expense' AND date >= ? AND date < ? AND include_in_stats = 1
+        `, [exchangeRate, targetStartDate, targetEndDate])) as { total_expense: number | null }[]
+
+        monthlyBudgetComparison.push({
+          month: `${targetMonth}월`,
+          budget: budgetResult[0]?.total_budget || 0,
+          expense: expenseResult[0]?.total_expense || 0,
+        })
+      }
+
       setData({
         totalAccountBalance,
         totalAssets,
@@ -235,6 +299,7 @@ export default function Dashboard() {
         monthlyBudget,
         recentTransactions,
         categoryExpenses,
+        monthlyBudgetComparison,
         exchangeRate,
       })
     } catch (error) {
@@ -345,7 +410,7 @@ export default function Dashboard() {
         </Grid>
 
         {/* 이번 달 수입/지출 */}
-        <Grid size={{ xs: 12, md: 6 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <DashboardCard title="이번 달 현황">
             <Stack spacing={3}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -404,8 +469,39 @@ export default function Dashboard() {
           </DashboardCard>
         </Grid>
 
+        {/* 최근 3개월 예산 vs 지출 */}
+        <Grid size={{ xs: 12, md: 4 }}>
+          <DashboardCard title="월별 예산 vs 지출">
+            {data.monthlyBudgetComparison.length === 0 ? (
+              <Typography color="textSecondary" textAlign="center" py={4}>
+                데이터가 없습니다.
+              </Typography>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={data.monthlyBudgetComparison} barGap={4}>
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => `${(value / 10000).toFixed(0)}만`}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => `${value.toLocaleString()}원`}
+                    labelFormatter={(label) => `${label}`}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12 }}
+                    formatter={(value) => (value === 'budget' ? '예산' : '지출')}
+                  />
+                  <Bar dataKey="budget" name="budget" fill="#5D87FF" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expense" name="expense" fill="#FA896B" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </DashboardCard>
+        </Grid>
+
         {/* 카테고리별 지출 */}
-        <Grid size={{ xs: 12, md: 6 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <DashboardCard title="카테고리별 지출 (이번 달)">
             {data.categoryExpenses.length === 0 ? (
               <Typography color="textSecondary" textAlign="center" py={4}>

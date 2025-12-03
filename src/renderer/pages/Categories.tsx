@@ -61,18 +61,12 @@ function CategoryListItem({
       <ListItemIcon sx={{ minWidth: 32 }}>
         <IconCircleFilled size={12} style={{ color: category.color }} />
       </ListItemIcon>
-      <ListItemText
-        primary={category.name}
-        secondary={
-          category.budget_item_names && (
-            <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
-              {category.budget_item_names.split(',').map((name, idx) => (
-                <Chip key={idx} label={name.trim()} size="small" sx={budgetChipSx} />
-              ))}
-            </Stack>
-          )
-        }
-      />
+      <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+        <Typography variant="body1">{category.name}</Typography>
+        {category.budget_item_names?.split(',').map((name, idx) => (
+          <Chip key={idx} label={name.trim()} size="small" sx={budgetChipSx} />
+        ))}
+      </Stack>
     </ListItem>
   )
 }
