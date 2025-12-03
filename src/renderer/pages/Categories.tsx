@@ -27,6 +27,84 @@ interface Category {
   budget_item_names: string | null
 }
 
+// 예산 항목 칩 스타일
+const budgetChipSx = {
+  height: 18,
+  fontSize: '0.7rem',
+  bgcolor: 'grey.100',
+  color: 'grey.600',
+  border: '1px solid',
+  borderColor: 'grey.300',
+  '& .MuiChip-label': { px: 0.75 },
+}
+
+// 카테고리 아이템 컴포넌트
+function CategoryListItem({
+  category,
+  onClick,
+}: {
+  category: Category
+  onClick: () => void
+}) {
+  return (
+    <ListItem
+      onClick={onClick}
+      sx={{
+        py: 1,
+        px: 2,
+        mb: 0.5,
+        borderRadius: 1,
+        cursor: 'pointer',
+        '&:hover': { bgcolor: 'action.hover' },
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 32 }}>
+        <IconCircleFilled size={12} style={{ color: category.color }} />
+      </ListItemIcon>
+      <ListItemText
+        primary={category.name}
+        secondary={
+          category.budget_item_names && (
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
+              {category.budget_item_names.split(',').map((name, idx) => (
+                <Chip key={idx} label={name.trim()} size="small" sx={budgetChipSx} />
+              ))}
+            </Stack>
+          )
+        }
+      />
+    </ListItem>
+  )
+}
+
+// 카테고리 리스트 컴포넌트
+function CategoryList({
+  categories,
+  title,
+  onItemClick,
+}: {
+  categories: Category[]
+  title: string
+  onItemClick: (category: Category) => void
+}) {
+  return (
+    <Box flex={1}>
+      <Typography variant="subtitle2" fontWeight={600} color="textSecondary" mb={1}>
+        {title} ({categories.length})
+      </Typography>
+      <List dense disablePadding>
+        {categories.map((cat) => (
+          <CategoryListItem
+            key={cat.id}
+            category={cat}
+            onClick={() => onItemClick(cat)}
+          />
+        ))}
+      </List>
+    </Box>
+  )
+}
+
 export default function Categories() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [categories, setCategories] = useState<Category[]>([])
@@ -81,33 +159,6 @@ export default function Categories() {
     (c) => c.type === 'expense' && c.expense_type === 'variable'
   )
 
-  const CategoryList = ({ items, title }: { items: Category[]; title: string }) => (
-    <Box mb={3}>
-      <Typography variant="subtitle1" fontWeight={600} color="textSecondary" mb={1}>
-        {title} ({items.length})
-      </Typography>
-      <List dense disablePadding>
-        {items.map((cat) => (
-          <ListItem
-            key={cat.id}
-            sx={{
-              py: 1,
-              px: 2,
-              mb: 0.5,
-              borderRadius: 1,
-              '&:hover': { bgcolor: 'action.hover' },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 32 }}>
-              <IconCircleFilled size={12} style={{ color: cat.color }} />
-            </ListItemIcon>
-            <ListItemText primary={cat.name} />
-          </ListItem>
-        ))}
-      </List>
-    </Box>
-  )
-
   if (loading) {
     return (
       <Box>
@@ -129,27 +180,11 @@ export default function Categories() {
           >
             <List dense disablePadding>
               {incomeCategories.map((cat) => (
-                <ListItem
+                <CategoryListItem
                   key={cat.id}
+                  category={cat}
                   onClick={() => handleOpenEdit(cat)}
-                  sx={{
-                    py: 1,
-                    px: 2,
-                    mb: 0.5,
-                    borderRadius: 1,
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <IconCircleFilled size={12} style={{ color: cat.color }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={cat.name}
-                    secondary={cat.budget_item_names}
-                    secondaryTypographyProps={{ variant: 'caption', sx: { opacity: 0.5 } }}
-                  />
-                </ListItem>
+                />
               ))}
             </List>
           </DashboardCard>
@@ -168,79 +203,17 @@ export default function Categories() {
             }
           >
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3}>
-              <Box flex={1}>
-                <Typography
-                  variant="subtitle2"
-                  fontWeight={600}
-                  color="textSecondary"
-                  mb={1}
-                >
-                  고정비 ({fixedExpenseCategories.length})
-                </Typography>
-                <List dense disablePadding>
-                  {fixedExpenseCategories.map((cat) => (
-                    <ListItem
-                      key={cat.id}
-                      onClick={() => handleOpenEdit(cat)}
-                      sx={{
-                        py: 1,
-                        px: 2,
-                        mb: 0.5,
-                        borderRadius: 1,
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: 'action.hover' },
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 32 }}>
-                        <IconCircleFilled size={12} style={{ color: cat.color }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={cat.name}
-                        secondary={cat.budget_item_names}
-                        secondaryTypographyProps={{ variant: 'caption', sx: { opacity: 0.5 } }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
-
+              <CategoryList
+                categories={fixedExpenseCategories}
+                title="고정비"
+                onItemClick={handleOpenEdit}
+              />
               <Divider orientation="vertical" flexItem />
-
-              <Box flex={1}>
-                <Typography
-                  variant="subtitle2"
-                  fontWeight={600}
-                  color="textSecondary"
-                  mb={1}
-                >
-                  변동비 ({variableExpenseCategories.length})
-                </Typography>
-                <List dense disablePadding>
-                  {variableExpenseCategories.map((cat) => (
-                    <ListItem
-                      key={cat.id}
-                      onClick={() => handleOpenEdit(cat)}
-                      sx={{
-                        py: 1,
-                        px: 2,
-                        mb: 0.5,
-                        borderRadius: 1,
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: 'action.hover' },
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 32 }}>
-                        <IconCircleFilled size={12} style={{ color: cat.color }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={cat.name}
-                        secondary={cat.budget_item_names}
-                        secondaryTypographyProps={{ variant: 'caption', sx: { opacity: 0.5 } }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
+              <CategoryList
+                categories={variableExpenseCategories}
+                title="변동비"
+                onItemClick={handleOpenEdit}
+              />
             </Stack>
           </DashboardCard>
         </Box>

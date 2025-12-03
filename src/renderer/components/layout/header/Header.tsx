@@ -7,14 +7,15 @@ import {
   IconButton,
   Typography,
 } from '@mui/material'
-import { IconMenu2, IconPlus } from '@tabler/icons-react'
+import { IconLayoutSidebarLeftExpand, IconLayoutSidebarLeftCollapse, IconPlus } from '@tabler/icons-react'
 import { usePageContext } from '../../../contexts/PageContext'
 
 interface HeaderProps {
-  toggleMobileSidebar: () => void
+  isSidebarCollapsed: boolean
+  toggleSidebar: () => void
 }
 
-const Header = ({ toggleMobileSidebar }: HeaderProps) => {
+const Header = ({ isSidebarCollapsed, toggleSidebar }: HeaderProps) => {
   const { pageTitle, onAdd } = usePageContext()
 
   const AppBarStyled = styled(AppBar)(({ theme }) => ({
@@ -50,16 +51,14 @@ const Header = ({ toggleMobileSidebar }: HeaderProps) => {
         <IconButton
           color="inherit"
           aria-label="menu"
-          onClick={toggleMobileSidebar}
+          onClick={toggleSidebar}
           className="no-drag"
-          sx={{
-            display: {
-              lg: 'none',
-              xs: 'inline',
-            },
-          }}
         >
-          <IconMenu2 width="20" height="20" />
+          {isSidebarCollapsed ? (
+            <IconLayoutSidebarLeftExpand width="20" height="20" />
+          ) : (
+            <IconLayoutSidebarLeftCollapse width="20" height="20" />
+          )}
         </IconButton>
 
         <Typography variant="h5" fontWeight={600} color="text.primary" sx={{ ml: 1 }}>

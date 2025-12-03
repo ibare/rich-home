@@ -38,6 +38,7 @@ interface Transaction {
   description: string | null
   memo: string | null
   include_in_stats: number
+  tag: string | null
 }
 
 interface BudgetSummary {
@@ -522,21 +523,40 @@ export default function Transactions() {
       headerName: '내용',
       flex: 1,
       minWidth: 150,
-      renderCell: (params: GridRenderCellParams<Transaction>) => (
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="body2">
-            {params.value || params.row.category_name}
-          </Typography>
-          {params.row.include_in_stats === 0 && (
-            <Chip
-              label="통계 제외"
-              size="small"
-              variant="outlined"
-              sx={{ height: 20, fontSize: '0.7rem' }}
-            />
-          )}
-        </Stack>
-      ),
+      renderCell: (params: GridRenderCellParams<Transaction>) => {
+        const tags = params.row.tag ? params.row.tag.split(',').map((t: string) => t.trim()).filter(Boolean) : []
+        return (
+          <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+            <Typography variant="body2">
+              {params.value || params.row.category_name}
+            </Typography>
+            {params.row.include_in_stats === 0 && (
+              <Chip
+                label="통계 제외"
+                size="small"
+                variant="outlined"
+                sx={{ height: 20, fontSize: '0.7rem' }}
+              />
+            )}
+            {tags.map((tag: string, index: number) => (
+              <Chip
+                key={index}
+                label={tag}
+                size="small"
+                sx={{
+                  height: 18,
+                  fontSize: '0.7rem',
+                  bgcolor: 'grey.100',
+                  color: 'grey.600',
+                  border: '1px solid',
+                  borderColor: 'grey.300',
+                  '& .MuiChip-label': { px: 0.75 },
+                }}
+              />
+            ))}
+          </Stack>
+        )
+      },
     },
     {
       field: 'category_name',

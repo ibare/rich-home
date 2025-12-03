@@ -1,6 +1,6 @@
 {
   "name": "rich-home",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "개인 재산 관리 가계부 애플리케이션",
   "main": "dist/main/index.js",
   "scripts": {

@@ -86,6 +86,13 @@ interface MonthlyCategoryStat {
   color: string
 }
 
+// 태그별 통계 인터페이스
+interface TagStat {
+  tag: string
+  amount: number
+  color: string
+}
+
 // 카테고리별 색상 팔레트
 const CATEGORY_COLORS = [
   '#5D87FF', '#13DEB9', '#FFAE1F', '#FA896B', '#49BEFF',
@@ -114,6 +121,8 @@ export default function Statistics() {
   // 카테고리별 지출 분석 (연간)
   const [treemapData, setTreemapData] = useState<TreemapData[]>([])
   const [categoryList, setCategoryList] = useState<CategoryInfo[]>([])
+  // 태그별 지출 분석 (연간)
+  const [yearlyTagStats, setYearlyTagStats] = useState<TagStat[]>([])
   // 기간 범위 선택
   const [dateRangeType, setDateRangeType] = useState<'all' | 'custom'>('custom')
   const [fromYear, setFromYear] = useState(new Date().getFullYear())
@@ -127,6 +136,7 @@ export default function Statistics() {
   const [budgetItemStats, setBudgetItemStats] = useState<BudgetItemStat[]>([])
   const [monthlyLoading, setMonthlyLoading] = useState(false)
   const [monthlyCategoryStats, setMonthlyCategoryStats] = useState<MonthlyCategoryStat[]>([])
+  const [monthlyTagStats, setMonthlyTagStats] = useState<TagStat[]>([])
   const [monthsWithData, setMonthsWithData] = useState<number[]>([])
 
   useEffect(() => {
@@ -391,6 +401,48 @@ export default function Statistics() {
       }))
 
       setTreemapData(treemap)
+
+      // 태그별 지출 통계 (연간)
+      const tagResult = await window.electronAPI.db.query(`
+        SELECT
+          t.tag,
+          t.currency,
+          SUM(t.amount) as total
+        FROM transactions t
+        WHERE t.type = 'expense'
+          AND t.include_in_stats = 1
+          AND t.date >= ? AND t.date < ?
+          AND t.tag IS NOT NULL AND t.tag != ''
+        GROUP BY t.tag, t.currency
+      `, [startDate, endDate]) as {
+        tag: string
+        currency: string
+        total: number
+      }[]
+
+      // 태그를 개별로 분리하고 합산 (KRW)
+      const tagTotals = new Map<string, number>()
+      tagResult.forEach(row => {
+        const amountKRW = row.currency === 'AED' ? row.total * exchangeRate : row.total
+        // 컴마로 구분된 태그 분리
+        row.tag.split(',').forEach(t => {
+          const trimmed = t.trim()
+          if (trimmed) {
+            const existing = tagTotals.get(trimmed) || 0
+            tagTotals.set(trimmed, existing + amountKRW)
+          }
+        })
+      })
+
+      const sortedTagStats: TagStat[] = Array.from(tagTotals.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag, amount], index) => ({
+          tag,
+          amount: Math.round(amount),
+          color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        }))
+
+      setYearlyTagStats(sortedTagStats)
     } catch (error) {
       console.error('Failed to load category expense data:', error)
     }
@@ -567,6 +619,48 @@ export default function Statistics() {
         }))
 
       setMonthlyCategoryStats(sortedCatStats)
+
+      // 5. 태그별 지출 통계
+      const tagStats = await window.electronAPI.db.query(`
+        SELECT
+          t.tag,
+          t.currency,
+          SUM(t.amount) as total
+        FROM transactions t
+        WHERE t.type = 'expense'
+          AND t.include_in_stats = 1
+          AND t.date >= ? AND t.date < ?
+          AND t.tag IS NOT NULL AND t.tag != ''
+        GROUP BY t.tag, t.currency
+      `, [startDate, endDate]) as {
+        tag: string
+        currency: string
+        total: number
+      }[]
+
+      // 태그를 개별로 분리하고 합산 (KRW)
+      const tagTotals = new Map<string, number>()
+      tagStats.forEach(stat => {
+        const amountKRW = stat.currency === 'AED' ? stat.total * exchangeRate : stat.total
+        // 컴마로 구분된 태그 분리
+        stat.tag.split(',').forEach(t => {
+          const trimmed = t.trim()
+          if (trimmed) {
+            const existing = tagTotals.get(trimmed) || 0
+            tagTotals.set(trimmed, existing + amountKRW)
+          }
+        })
+      })
+
+      const sortedTagStats: TagStat[] = Array.from(tagTotals.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag, amount], index) => ({
+          tag,
+          amount: Math.round(amount),
+          color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        }))
+
+      setMonthlyTagStats(sortedTagStats)
     } catch (error) {
       console.error('Failed to load monthly stats data:', error)
     } finally {
@@ -722,74 +816,47 @@ export default function Statistics() {
                       </Card>
                     </Stack>
 
-                    {/* 예산 항목 리스트 */}
-                    <Stack spacing={2}>
-                      {budgetItemStats.map((item) => {
-                        const percentage = item.budgetAmount > 0 ? Math.min((item.spentAmount / item.budgetAmount) * 100, 150) : 0
-                        const isOverBudget = item.spentAmount > item.budgetAmount
-
-                        return (
-                          <Card key={item.id} variant="outlined">
-                            <CardContent sx={{ py: 2 }}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography fontWeight={600}>{item.name}</Typography>
-                                  {item.group_name && (
-                                    <Chip label={item.group_name} size="small" variant="outlined" />
-                                  )}
-                                </Stack>
-                                <Stack direction="row" spacing={2} alignItems="center">
-                                  <Stack direction="row" spacing={0.5} alignItems="baseline">
-                                    <Typography variant="body2" color="textSecondary">예산:</Typography>
-                                    <AmountText amount={item.budgetAmount} currency="KRW" variant="body2" />
-                                  </Stack>
-                                  <Stack direction="row" spacing={0.5} alignItems="baseline">
-                                    <Typography variant="body2" fontWeight={600} color={isOverBudget ? 'error.main' : 'success.main'}>지출:</Typography>
-                                    <AmountText amount={item.spentAmount} currency="KRW" variant="body2" fontWeight={600} color={isOverBudget ? 'error.main' : 'success.main'} />
-                                  </Stack>
-                                </Stack>
-                              </Stack>
-                              <Box sx={{ position: 'relative' }}>
-                                <LinearProgress
-                                  variant="determinate"
-                                  value={Math.min(percentage, 100)}
-                                  sx={{
-                                    height: 10,
-                                    borderRadius: 5,
-                                    bgcolor: 'grey.200',
-                                    '& .MuiLinearProgress-bar': {
-                                      bgcolor: isOverBudget ? 'error.main' : percentage > 80 ? 'warning.main' : 'success.main',
-                                    },
-                                  }}
-                                />
-                                {isOverBudget && (
-                                  <Box
-                                    sx={{
-                                      position: 'absolute',
-                                      right: 0,
-                                      top: 0,
-                                      height: '100%',
-                                      width: `${Math.min((percentage - 100) / 0.5, 50)}%`,
-                                      bgcolor: 'error.light',
-                                      borderRadius: '0 5px 5px 0',
-                                      opacity: 0.5,
-                                    }}
-                                  />
-                                )}
-                              </Box>
-                              <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
-                                <Typography variant="caption" color="textSecondary">
-                                  {item.categories.length > 0 ? item.categories.join(', ') : '연결된 카테고리 없음'}
-                                </Typography>
-                                <Typography variant="caption" fontWeight={500} color={isOverBudget ? 'error.main' : 'textSecondary'}>
-                                  {percentage.toFixed(0)}%
-                                </Typography>
-                              </Stack>
-                            </CardContent>
-                          </Card>
-                        )
-                      })}
-                    </Stack>
+                    {/* 바 그래프 */}
+                    <Box sx={{ height: 350 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={budgetItemStats.map(item => ({
+                            name: item.name,
+                            예산: item.budgetAmount,
+                            지출: item.spentAmount,
+                            isOverBudget: item.spentAmount > item.budgetAmount,
+                          }))}
+                          margin={{ top: 5, right: 20, left: 20, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 11 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
+                            interval={0}
+                          />
+                          <YAxis
+                            tickFormatter={(value) => value >= 10000 ? `${(value / 10000).toFixed(0)}만` : value >= 1000 ? `${(value / 1000).toFixed(0)}천` : `${value}`}
+                          />
+                          <Tooltip
+                            formatter={(value: number, name: string) => [`${value.toLocaleString()}원`, name]}
+                            labelFormatter={(label) => `${label}`}
+                          />
+                          <Legend />
+                          <Bar dataKey="예산" fill="#E0E0E0" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="지출" radius={[4, 4, 0, 0]}>
+                            {budgetItemStats.map((item) => (
+                              <Cell
+                                key={item.id}
+                                fill={item.spentAmount > item.budgetAmount ? '#FA896B' : item.spentAmount > item.budgetAmount * 0.8 ? '#FFAE1F' : '#13DEB9'}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Box>
                   </>
                 )}
               </DashboardCard>
@@ -864,6 +931,73 @@ export default function Statistics() {
                   )}
                 </DashboardCard>
               </Box>
+
+              {/* 태그별 통계 */}
+              {monthlyTagStats.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                  <DashboardCard title="태그별 지출">
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+                      {/* 파이 차트 */}
+                      <Box sx={{ flex: 1, height: 300 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={monthlyTagStats}
+                              dataKey="amount"
+                              nameKey="tag"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={2}
+                            >
+                              {monthlyTagStats.map((entry, index) => (
+                                <Cell key={entry.tag} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: number) => [`${value.toLocaleString()}원`, '']}
+                            />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </Box>
+
+                      {/* 태그 목록 */}
+                      <Box sx={{ flex: 1, minWidth: 250 }}>
+                        <Stack spacing={1}>
+                          {monthlyTagStats.map((tagStat) => (
+                            <Stack key={tagStat.tag} direction="row" alignItems="center" justifyContent="space-between">
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <Box
+                                  sx={{
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: '2px',
+                                    bgcolor: tagStat.color,
+                                  }}
+                                />
+                                <Typography variant="body2">{tagStat.tag}</Typography>
+                              </Stack>
+                              <Typography variant="body2" fontWeight={500}>
+                                {tagStat.amount.toLocaleString()}원
+                              </Typography>
+                            </Stack>
+                          ))}
+                        </Stack>
+                        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                          <Stack direction="row" justifyContent="space-between">
+                            <Typography variant="body2" fontWeight={600}>합계</Typography>
+                            <Typography variant="body2" fontWeight={600} color="primary.main">
+                              {monthlyTagStats.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}원
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      </Box>
+                    </Stack>
+                  </DashboardCard>
+                </Box>
+              )}
             </>
           )}
         </Box>
@@ -1493,6 +1627,73 @@ export default function Statistics() {
         )}
       </DashboardCard>
       </Box>
+
+      {/* 태그별 지출 분석 */}
+      {yearlyTagStats.length > 0 && (
+        <Box sx={{ mt: 3 }}>
+          <DashboardCard title="태그별 지출 분석">
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
+              {/* 파이 차트 */}
+              <Box sx={{ flex: 1, height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={yearlyTagStats}
+                      dataKey="amount"
+                      nameKey="tag"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                    >
+                      {yearlyTagStats.map((entry) => (
+                        <Cell key={entry.tag} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number) => [`${value.toLocaleString()}원`, '']}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+
+              {/* 태그 목록 */}
+              <Box sx={{ flex: 1, minWidth: 250 }}>
+                <Stack spacing={1}>
+                  {yearlyTagStats.map((tagStat) => (
+                    <Stack key={tagStat.tag} direction="row" alignItems="center" justifyContent="space-between">
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '2px',
+                            bgcolor: tagStat.color,
+                          }}
+                        />
+                        <Typography variant="body2">{tagStat.tag}</Typography>
+                      </Stack>
+                      <Typography variant="body2" fontWeight={500}>
+                        {tagStat.amount.toLocaleString()}원
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="body2" fontWeight={600}>합계</Typography>
+                    <Typography variant="body2" fontWeight={600} color="primary.main">
+                      {yearlyTagStats.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}원
+                    </Typography>
+                  </Stack>
+                </Box>
+              </Box>
+            </Stack>
+          </DashboardCard>
+        </Box>
+      )}
         </Box>
       )}
     </Box>

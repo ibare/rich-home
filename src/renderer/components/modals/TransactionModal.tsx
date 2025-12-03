@@ -41,6 +41,7 @@ interface EditTransaction {
   date: string
   description: string | null
   include_in_stats: number
+  tag: string | null
 }
 
 interface TransactionModalProps {
@@ -69,6 +70,7 @@ interface PendingTransaction {
   date: string
   description: string
   include_in_stats: boolean
+  tags: string[]
 }
 
 // 해당 월의 마지막 날 계산
@@ -98,16 +100,22 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     date: getInitialDate(),
     description: '',
     include_in_stats: true,
+    tags: [] as string[],
   })
   const [saving, setSaving] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
   const [descriptionSuggestions, setDescriptionSuggestions] = useState<string[]>([])
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     if (open) {
       loadCategories()
+      loadTagSuggestions()
       if (editTransaction) {
         // 수정 모드: 기존 데이터로 폼 채우기
+        const existingTags = editTransaction.tag
+          ? editTransaction.tag.split(',').map(t => t.trim()).filter(t => t)
+          : []
         setFormData({
           type: editTransaction.type,
           amount: editTransaction.amount.toLocaleString(),
@@ -116,6 +124,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
           date: editTransaction.date,
           description: editTransaction.description || '',
           include_in_stats: editTransaction.include_in_stats === 1,
+          tags: existingTags,
         })
         loadDescriptionSuggestions(editTransaction.category_id)
       } else if (selectedYear && selectedMonth) {
@@ -162,9 +171,33 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     }
   }
 
+  // 기존 거래에서 태그 목록 조회 (그룹핑)
+  const loadTagSuggestions = async () => {
+    try {
+      const result = await window.electronAPI.db.query(
+        `SELECT DISTINCT tag FROM transactions
+         WHERE tag IS NOT NULL AND tag != ''`
+      ) as { tag: string }[]
+
+      // 컴마로 구분된 태그들을 분리하고 중복 제거
+      const allTags = new Set<string>()
+      result.forEach(r => {
+        r.tag.split(',').forEach(t => {
+          const trimmed = t.trim()
+          if (trimmed) allTags.add(trimmed)
+        })
+      })
+
+      setTagSuggestions(Array.from(allTags).sort())
+    } catch (error) {
+      console.error('Failed to load tag suggestions:', error)
+      setTagSuggestions([])
+    }
+  }
+
   const handleChange = (field: string, value: string) => {
     if (field === 'type') {
-      setFormData((prev) => ({ ...prev, [field]: value, category_id: '' }))
+      setFormData((prev) => ({ ...prev, type: value as 'income' | 'expense', category_id: '' }))
       setDescriptionSuggestions([])
     } else if (field === 'category_id') {
       setFormData((prev) => ({ ...prev, [field]: value }))
@@ -204,11 +237,11 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
       date: formData.date,
       description: formData.description,
       include_in_stats: formData.include_in_stats,
+      tags: formData.tags,
     }
-
     setPendingList((prev) => [...prev, newTransaction])
 
-    // 금액과 내용만 초기화 (날짜, 타입, 통화, 카테고리 유지)
+    // 금액과 내용만 초기화 (날짜, 타입, 통화, 카테고리, 태그 유지)
     setFormData((prev) => ({
       ...prev,
       amount: '',
@@ -243,9 +276,10 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
 
     setSaving(true)
     try {
+      const tagString = formData.tags.length > 0 ? formData.tags.join(', ') : null
       await window.electronAPI.db.query(
         `UPDATE transactions
-         SET type = ?, amount = ?, currency = ?, category_id = ?, date = ?, description = ?, include_in_stats = ?, updated_at = datetime('now')
+         SET type = ?, amount = ?, currency = ?, category_id = ?, date = ?, description = ?, include_in_stats = ?, tag = ?, updated_at = datetime('now')
          WHERE id = ?`,
         [
           formData.type,
@@ -255,6 +289,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
           formData.date,
           formData.description || null,
           formData.include_in_stats ? 1 : 0,
+          tagString,
           editTransaction.id,
         ]
       )
@@ -280,10 +315,11 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     setSaving(true)
     try {
       for (const tx of pendingList) {
+        const tagString = tx.tags.length > 0 ? tx.tags.join(', ') : null
         await window.electronAPI.db.query(
-          `INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [tx.id, tx.type, tx.amount, tx.currency, tx.category_id, tx.date, tx.description || null, tx.include_in_stats ? 1 : 0]
+          `INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats, tag)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tx.id, tx.type, tx.amount, tx.currency, tx.category_id, tx.date, tx.description || null, tx.include_in_stats ? 1 : 0, tagString]
         )
       }
 
@@ -308,6 +344,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
       date: new Date().toISOString().slice(0, 10),
       description: '',
       include_in_stats: true,
+      tags: [],
     })
   }
 
@@ -483,6 +520,39 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
               </Button>
             </Stack>
 
+            {/* 세 번째 줄: 태그 */}
+            <Stack direction="row" spacing={2}>
+              <Autocomplete
+                multiple
+                freeSolo
+                autoSelect
+                options={tagSuggestions}
+                value={formData.tags}
+                onChange={(_, newValue) => setFormData(prev => ({ ...prev, tags: newValue as string[] }))}
+                sx={{ flex: 1 }}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => (
+                    <Chip
+                      {...getTagProps({ index })}
+                      key={option}
+                      label={option}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="태그 (선택)"
+                    size="small"
+                    placeholder="태그 입력 후 Enter"
+                  />
+                )}
+              />
+            </Stack>
+
             {!isEditMode && (
               <Typography variant="caption" color="textSecondary">
                 Enter 키를 눌러 빠르게 추가할 수 있습니다.
@@ -531,7 +601,27 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
                             />
                           </TableCell>
                           <TableCell>{tx.date}</TableCell>
-                          <TableCell>{tx.category_name}</TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                              <Typography variant="body2">{tx.category_name}</Typography>
+                              {tx.tags.map((tag, index) => (
+                                <Chip
+                                  key={index}
+                                  label={tag}
+                                  size="small"
+                                  sx={{
+                                    height: 18,
+                                    fontSize: '0.7rem',
+                                    bgcolor: 'grey.100',
+                                    color: 'grey.600',
+                                    border: '1px solid',
+                                    borderColor: 'grey.300',
+                                    '& .MuiChip-label': { px: 0.75 },
+                                  }}
+                                />
+                              ))}
+                            </Stack>
+                          </TableCell>
                           <TableCell>{tx.description || '-'}</TableCell>
                           <TableCell align="right">
                             <Typography

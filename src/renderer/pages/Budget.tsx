@@ -20,6 +20,7 @@ import {
   Button,
   Tabs,
   Tab,
+  Badge,
 } from '@mui/material'
 import {
   IconEdit,
@@ -231,15 +232,53 @@ export default function Budget() {
           >
             {hasUngrouped && (
               <Tab
-                label={`비그룹 (${budgetItems.filter((i) => !i.group_name).length})`}
+                label={
+                  <Badge
+                    badgeContent={budgetItems.filter((i) => !i.group_name).length}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        right: -10,
+                        top: 2,
+                        bgcolor: selectedTab === UNGROUPED_TAB ? 'primary.main' : 'grey.300',
+                        color: selectedTab === UNGROUPED_TAB ? 'white' : 'grey.600',
+                        fontSize: 10,
+                        height: 16,
+                        minWidth: 16,
+                        padding: '0 4px',
+                      },
+                    }}
+                  >
+                    비그룹
+                  </Badge>
+                }
                 value={UNGROUPED_TAB}
+                sx={{ minWidth: 100 }}
               />
             )}
             {groups.map((group) => (
               <Tab
                 key={group}
-                label={`${group} (${budgetItems.filter((i) => i.group_name === group).length})`}
+                label={
+                  <Badge
+                    badgeContent={budgetItems.filter((i) => i.group_name === group).length}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        right: -10,
+                        top: 2,
+                        bgcolor: selectedTab === group ? 'primary.main' : 'grey.300',
+                        color: selectedTab === group ? 'white' : 'grey.600',
+                        fontSize: 10,
+                        height: 16,
+                        minWidth: 16,
+                        padding: '0 4px',
+                      },
+                    }}
+                  >
+                    {group}
+                  </Badge>
+                }
                 value={group}
+                sx={{ minWidth: 100 }}
               />
             ))}
           </Tabs>

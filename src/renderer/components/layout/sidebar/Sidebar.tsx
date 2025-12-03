@@ -1,20 +1,12 @@
-import { useMediaQuery, Box, Drawer, useTheme } from '@mui/material'
+import { Box, Drawer } from '@mui/material'
 import SidebarItems from './SidebarItems'
 
 interface SidebarProps {
-  isSidebarOpen: boolean
-  isMobileSidebarOpen: boolean
-  onSidebarClose: () => void
+  isCollapsed: boolean
 }
 
-const Sidebar = ({
-  isSidebarOpen,
-  isMobileSidebarOpen,
-  onSidebarClose,
-}: SidebarProps) => {
-  const theme = useTheme()
-  const lgUp = useMediaQuery(theme.breakpoints.up('lg'))
-  const sidebarWidth = '270px'
+const Sidebar = ({ isCollapsed }: SidebarProps) => {
+  const sidebarWidth = isCollapsed ? '70px' : '270px'
 
   const scrollbarStyles = {
     '&::-webkit-scrollbar': {
@@ -26,54 +18,35 @@ const Sidebar = ({
     },
   }
 
-  if (lgUp) {
-    return (
-      <Box
-        sx={{
-          width: sidebarWidth,
-          flexShrink: 0,
-        }}
-      >
-        <Drawer
-          anchor="left"
-          open={isSidebarOpen}
-          variant="permanent"
-          PaperProps={{
-            sx: {
-              boxSizing: 'border-box',
-              ...scrollbarStyles,
-              width: sidebarWidth,
-              borderRight: '1px solid',
-              borderColor: 'divider',
-            },
-          }}
-        >
-          <Box sx={{ height: '100%' }}>
-            <SidebarItems />
-          </Box>
-        </Drawer>
-      </Box>
-    )
-  }
-
   return (
-    <Drawer
-      anchor="left"
-      open={isMobileSidebarOpen}
-      onClose={onSidebarClose}
-      variant="temporary"
-      PaperProps={{
-        sx: {
-          boxShadow: theme.shadows[8],
-          width: sidebarWidth,
-          ...scrollbarStyles,
-        },
+    <Box
+      sx={{
+        width: sidebarWidth,
+        flexShrink: 0,
+        transition: 'width 0.2s ease-in-out',
       }}
     >
-      <Box>
-        <SidebarItems />
-      </Box>
-    </Drawer>
+      <Drawer
+        anchor="left"
+        open
+        variant="permanent"
+        PaperProps={{
+          sx: {
+            boxSizing: 'border-box',
+            ...scrollbarStyles,
+            width: sidebarWidth,
+            borderRight: '1px solid',
+            borderColor: 'divider',
+            transition: 'width 0.2s ease-in-out',
+            overflowX: 'hidden',
+          },
+        }}
+      >
+        <Box sx={{ height: '100%' }}>
+          <SidebarItems isCollapsed={isCollapsed} />
+        </Box>
+      </Drawer>
+    </Box>
   )
 }
 

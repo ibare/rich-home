@@ -33,21 +33,19 @@ const PageWrapper = styled('div')(({ theme }) => ({
 }))
 
 function App() {
-  const [isSidebarOpen, setSidebarOpen] = useState(true)
-  const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
     <HashRouter>
       <PageProvider>
         <MainWrapper>
-          <Sidebar
-            isSidebarOpen={isSidebarOpen}
-            isMobileSidebarOpen={isMobileSidebarOpen}
-            onSidebarClose={() => setMobileSidebarOpen(false)}
-          />
+          <Sidebar isCollapsed={isSidebarCollapsed} />
 
           <PageWrapper>
-            <Header toggleMobileSidebar={() => setMobileSidebarOpen(true)} />
+            <Header
+              isSidebarCollapsed={isSidebarCollapsed}
+              toggleSidebar={() => setSidebarCollapsed(!isSidebarCollapsed)}
+            />
 
             <Box
               sx={{
