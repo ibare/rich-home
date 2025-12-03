@@ -1,6 +1,6 @@
 {
   "name": "rich-home",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "개인 재산 관리 가계부 애플리케이션",
   "main": "dist/main/index.js",
   "scripts": {
@@ -15,6 +15,9 @@
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
+    "publish": "npm run build && dotenv electron-builder --publish always",
+    "publish:mac": "npm run build && dotenv electron-builder --mac --publish always",
+    "publish:win": "npm run build && dotenv electron-builder --win --publish always",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
   },
   "keywords": [
@@ -31,6 +34,7 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
+    "dotenv-cli": "^11.0.0",
     "electron": "^39.2.3",
     "electron-builder": "^26.0.12",
     "electron-rebuild": "^3.2.9",
@@ -48,6 +52,7 @@
     "@tabler/icons-react": "^3.35.0",
     "better-sqlite3": "^12.4.5",
     "date-fns": "^4.1.0",
+    "electron-updater": "^6.6.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-mui-sidebar": "^1.6.10",
@@ -92,6 +97,11 @@
         "AppImage",
         "deb"
       ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ibare",
+      "repo": "rich-home"
     }
   }
 }

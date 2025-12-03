@@ -1,10 +1,15 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
+import { autoUpdater } from 'electron-updater'
 import { initDatabase, getDatabase, getCurrentDbPath, getDefaultPath, changeDbPath, resetToDefaultPath } from './database'
 
 let mainWindow: BrowserWindow | null = null
 
 const isDev = process.env.NODE_ENV === 'development'
+
+// 자동 업데이트 설정
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
 
 function createWindow() {
   // 아이콘 경로 설정
@@ -58,11 +63,49 @@ app.whenReady().then(() => {
   initDatabase()
   createWindow()
 
+  // 프로덕션에서만 자동 업데이트 체크
+  if (!isDev) {
+    autoUpdater.checkForUpdates()
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }
   })
+})
+
+// 자동 업데이트 이벤트 핸들러
+autoUpdater.on('update-available', (info) => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: '업데이트 가능',
+    message: `새 버전 ${info.version}이 있습니다. 다운로드하시겠습니까?`,
+    buttons: ['다운로드', '나중에'],
+    defaultId: 0,
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate()
+    }
+  })
+})
+
+autoUpdater.on('update-downloaded', () => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: '업데이트 준비 완료',
+    message: '업데이트가 다운로드되었습니다. 지금 재시작하여 설치하시겠습니까?',
+    buttons: ['재시작', '나중에'],
+    defaultId: 0,
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall()
+    }
+  })
+})
+
+autoUpdater.on('error', (error) => {
+  console.error('Auto-updater error:', error)
 })
 
 app.on('window-all-closed', () => {
