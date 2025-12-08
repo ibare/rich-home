@@ -20,8 +20,10 @@ export default function AmountText({
   showSign = false,
   signType,
 }: AmountTextProps) {
+  // AED: 소수점 이하가 있으면 2자리, 없으면 정수로 표시
+  const isWholeNumber = currency === 'AED' && amount % 1 === 0
   const formattedAmount = Math.abs(amount).toLocaleString('ko-KR', {
-    minimumFractionDigits: currency === 'AED' ? 0 : 0,
+    minimumFractionDigits: currency === 'AED' && !isWholeNumber ? 2 : 0,
     maximumFractionDigits: currency === 'AED' ? 2 : 0,
   })
 
@@ -66,8 +68,9 @@ export default function AmountText({
 
 // 간단한 문자열 포맷 함수 (JSX가 필요없는 경우)
 export function formatAmount(amount: number, currency: string): string {
+  const isWholeNumber = currency === 'AED' && amount % 1 === 0
   const formatted = Math.abs(amount).toLocaleString('ko-KR', {
-    minimumFractionDigits: currency === 'AED' ? 0 : 0,
+    minimumFractionDigits: currency === 'AED' && !isWholeNumber ? 2 : 0,
     maximumFractionDigits: currency === 'AED' ? 2 : 0,
   })
   return currency === 'KRW' ? `${formatted} 원` : `${formatted} AED`

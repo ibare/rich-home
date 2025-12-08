@@ -25,25 +25,42 @@ interface AmountInputProps {
 }
 
 // 숫자 포맷팅 함수
-const formatNumber = (value: string, currency: string): string => {
+// finalize: true면 최종 포맷팅 (blur 시), false면 입력 중 포맷팅
+const formatNumber = (value: string, currency: string, finalize = false): string => {
   const num = value.replace(/[^\d.]/g, '')
   if (num === '') return ''
 
-  // AED는 소수점 2자리까지 허용
+  // AED는 소수점 2자리 고정
   if (currency === 'AED') {
     const parts = num.split('.')
-    if (parts.length > 2) return formatNumber(parts[0] + '.' + parts.slice(1).join(''), currency)
-    if (parts[1]?.length > 2) {
-      parts[1] = parts[1].slice(0, 2)
+
+    // 소수점이 2개 이상인 경우 첫 번째 소수점만 유지
+    if (parts.length > 2) {
+      return formatNumber(parts[0] + '.' + parts.slice(1).join(''), currency, finalize)
     }
-    const parsed = parseFloat(parts.join('.'))
-    if (isNaN(parsed)) return ''
+
+    // 정수 부분 포맷팅
+    const intPart = parts[0]
+    const parsedInt = parseInt(intPart, 10)
+    if (isNaN(parsedInt) && intPart !== '') return ''
+    const formattedInt = intPart === '' ? '0' : parsedInt.toLocaleString()
+
+    // 소수점이 있는 경우
     if (parts.length === 2) {
-      return parsed.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-        .replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-        + (num.endsWith('.') ? '.' : (parts[1] === '' ? '.' : ''))
+      const decPart = parts[1]
+      // 소수점만 있고 숫자가 없는 경우
+      if (decPart === '') {
+        // 최종 포맷팅이면 소수점 제거, 입력 중이면 소수점 유지
+        return finalize ? formattedInt : formattedInt + '.'
+      }
+      // 소수점 이하 숫자가 있으면 2자리까지 허용
+      const trimmedDec = decPart.slice(0, 2)
+      // 최종 포맷팅이면 2자리로 패딩, 입력 중이면 그대로
+      const finalDec = finalize ? trimmedDec.padEnd(2, '0') : trimmedDec
+      return formattedInt + '.' + finalDec
     }
-    return parsed.toLocaleString()
+
+    return intPart === '' ? '' : formattedInt
   }
 
   // KRW는 정수만
@@ -77,7 +94,14 @@ export default function AmountInput({
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/,/g, '')
     if (raw === '' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && currency === 'AED')) {
-      onChange(formatNumber(raw, currency), currency)
+      onChange(formatNumber(raw, currency, false), currency)
+    }
+  }
+
+  // blur 시 최종 포맷팅 적용
+  const handleBlur = () => {
+    if (value && currency === 'AED') {
+      onChange(formatNumber(value.replace(/,/g, ''), currency, true), currency)
     }
   }
 
@@ -117,6 +141,7 @@ export default function AmountInput({
         label={label}
         value={value}
         onChange={handleAmountChange}
+        onBlur={handleBlur}
         size={size}
         sx={{ width: 270, ...sx }}
         InputProps={{
