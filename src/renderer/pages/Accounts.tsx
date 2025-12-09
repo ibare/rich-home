@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Badge,
 } from '@mui/material'
 import { IconWallet, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
@@ -34,7 +33,7 @@ interface Account {
 }
 
 // 최근 데이터 입력일에 따른 아이콘 색상 결정
-const getIconColors = (recordedAt?: string): { icon: string; bg: string; label: string } | undefined => {
+const getIconColors = (recordedAt?: string): { icon: string; bg: string } | undefined => {
   if (!recordedAt) return undefined
 
   const recorded = new Date(recordedAt)
@@ -50,11 +49,11 @@ const getIconColors = (recordedAt?: string): { icon: string; bg: string; label: 
   const yesterdayDate = yesterday.toDateString()
 
   if (recordedDate === todayDate) {
-    return { icon: '#00441b', bg: '#ffb600', label: '오늘' }
+    return { icon: '#00441b', bg: '#ffb600' }
   } else if (recordedDate === yesterdayDate) {
-    return { icon: '#238b45', bg: '#e1ff61', label: '어제' }
+    return { icon: '#238b45', bg: '#e1ff61' }
   } else if (recorded >= weekAgo) {
-    return { icon: '#74c476', bg: '#e5f5e0', label: '최근' }
+    return { icon: '#74c476', bg: '#e5f5e0' }
   }
   return undefined
 }
@@ -201,32 +200,16 @@ export default function Accounts() {
                         alignItems="center"
                       >
                         <Stack direction="row" spacing={2} alignItems="center">
-                          <Badge
-                            badgeContent={colors?.label}
-                            invisible={!colors?.label}
+                          <Box
                             sx={{
-                              '& .MuiBadge-badge': {
-                                bgcolor: '#ffffff',
-                                color: '#222222',
-                                border: '1px solid #222222',
-                                fontSize: '0.65rem',
-                                height: 16,
-                                minWidth: 16,
-                                padding: '0 4px',
-                              },
+                              p: 1.5,
+                              borderRadius: 2,
+                              bgcolor: colors?.bg || '#f5f5f5',
+                              color: colors?.icon || '#bdbdbd',
                             }}
                           >
-                            <Box
-                              sx={{
-                                p: 1.5,
-                                borderRadius: 2,
-                                bgcolor: colors?.bg || '#f5f5f5',
-                                color: colors?.icon || '#bdbdbd',
-                              }}
-                            >
-                              <IconWallet size={24} />
-                            </Box>
-                          </Badge>
+                            <IconWallet size={24} />
+                          </Box>
                           <Box>
                             <Stack direction="row" spacing={1} alignItems="center">
                               <Typography variant="h6">{account.name}</Typography>

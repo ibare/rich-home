@@ -42,7 +42,8 @@ interface Transaction {
 }
 
 interface BudgetSummary {
-  group_name: string
+  budget_item_id: string
+  budget_item_name: string
   budget_amount: number
   spent_amount: number
 }
@@ -65,7 +66,7 @@ export default function Transactions() {
   const [budgetItemModalOpen, setBudgetItemModalOpen] = useState(false)
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
-  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set())
+  const [selectedBudgetItem, setSelectedBudgetItem] = useState<string | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
   // 필터 - localStorage에서 마지막 선택한 년월 불러오기
@@ -100,7 +101,7 @@ export default function Transactions() {
   useEffect(() => {
     loadTransactions()
     loadBudgetSummaries()
-    setSelectedGroups(new Set()) // 월 변경 시 선택 초기화
+    setSelectedBudgetItem(null) // 월 변경 시 선택 초기화
   }, [selectedYear, selectedMonth, exchangeRate])
 
   useEffect(() => {
@@ -134,26 +135,15 @@ export default function Transactions() {
     }
   }
 
-  // 예산 그룹 선택 토글
-  const toggleGroupSelection = (groupName: string) => {
-    setSelectedGroups((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(groupName)) {
-        newSet.delete(groupName)
-      } else {
-        newSet.add(groupName)
-      }
-      return newSet
-    })
+  // 예산 항목 선택 토글 (단일 선택)
+  const toggleBudgetItemSelection = (budgetItemId: string) => {
+    setSelectedBudgetItem((prev) => prev === budgetItemId ? null : budgetItemId)
   }
 
-  // 선택된 그룹에 따른 거래내역 필터링
-  const filteredTransactions = selectedGroups.size === 0
+  // 선택된 예산 항목에 따른 거래내역 필터링
+  const filteredTransactions = selectedBudgetItem === null
     ? transactions
-    : transactions.filter((t) => {
-        const groupName = t.budget_group_name || '미분류'
-        return selectedGroups.has(groupName)
-      })
+    : transactions.filter((t) => t.budget_item_id === selectedBudgetItem)
 
   // 해당 연도의 월별 데이터 존재 여부 조회
   const loadMonthsWithData = async () => {
@@ -209,7 +199,7 @@ export default function Transactions() {
     }
   }
 
-  // 예산 그룹별 지출 집계 조회
+  // 예산 항목별 지출 집계 조회
   const loadBudgetSummaries = async () => {
     try {
       const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
@@ -218,41 +208,38 @@ export default function Transactions() {
           ? `${selectedYear + 1}-01-01`
           : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      // 예산 그룹별로 집계 (group_name 기준)
+      // 예산 항목별로 집계
       // 환율을 적용하여 모든 금액을 KRW로 환산
       // distributed 예산은 기간 기반 월 분배액 계산
-      // 지출은 그룹 내 모든 카테고리에서 DISTINCT하게 집계 (중복 방지)
       const budgetQuery = `
         SELECT
-          COALESCE(bi.group_name, '미분류') as group_name,
-          SUM(
-            CASE
-              WHEN bi.budget_type = 'distributed' AND bi.valid_from IS NOT NULL AND bi.valid_to IS NOT NULL THEN
-                CASE WHEN bi.currency = 'AED'
-                  THEN ROUND(bi.base_amount / MAX(1, (
-                    (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
-                    (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
-                  ))) * ?
-                  ELSE ROUND(bi.base_amount / MAX(1, (
-                    (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
-                    (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
-                  )))
-                END
-              ELSE
-                CASE WHEN bi.currency = 'AED'
-                  THEN bi.base_amount * ?
-                  ELSE bi.base_amount
-                END
-            END
-          ) as budget_amount
+          bi.id as budget_item_id,
+          bi.name as budget_item_name,
+          CASE
+            WHEN bi.budget_type = 'distributed' AND bi.valid_from IS NOT NULL AND bi.valid_to IS NOT NULL THEN
+              CASE WHEN bi.currency = 'AED'
+                THEN ROUND(bi.base_amount / MAX(1, (
+                  (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
+                  (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
+                ))) * ?
+                ELSE ROUND(bi.base_amount / MAX(1, (
+                  (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
+                  (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
+                )))
+              END
+            ELSE
+              CASE WHEN bi.currency = 'AED'
+                THEN bi.base_amount * ?
+                ELSE bi.base_amount
+              END
+          END as budget_amount
         FROM budget_items bi
         WHERE bi.is_active = 1
           AND (
             bi.budget_type != 'distributed'
             OR (bi.valid_from < ? AND bi.valid_to >= ?)
           )
-        GROUP BY COALESCE(bi.group_name, '미분류')
-        ORDER BY bi.group_name
+        ORDER BY bi.sort_order
       `
 
       const budgetResult = await window.electronAPI.db.query(budgetQuery, [
@@ -260,52 +247,48 @@ export default function Transactions() {
         exchangeRate,
         endDate,
         startDate,
-      ]) as { group_name: string; budget_amount: number }[]
+      ]) as { budget_item_id: string; budget_item_name: string; budget_amount: number }[]
 
-      // 그룹별 지출 집계 (그룹 내 모든 카테고리의 거래를 DISTINCT하게)
-      // 같은 거래가 여러 예산 항목에 연결된 카테고리에 있을 수 있으므로 거래 ID로 중복 제거
+      // 예산 항목별 지출 집계
       const spentQuery = `
         SELECT
-          group_name,
-          COALESCE(SUM(amount_krw), 0) as spent_amount
-        FROM (
-          SELECT DISTINCT
-            t.id,
-            COALESCE(bi.group_name, '미분류') as group_name,
+          bi.id as budget_item_id,
+          COALESCE(SUM(
             CASE WHEN t.currency = 'AED'
               THEN t.amount * ?
               ELSE t.amount
-            END as amount_krw
-          FROM transactions t
-          JOIN budget_item_categories bic ON t.category_id = bic.category_id
-          JOIN budget_items bi ON bic.budget_item_id = bi.id
-          WHERE bi.is_active = 1
-            AND (
-              bi.budget_type != 'distributed'
-              OR (bi.valid_from < ? AND bi.valid_to >= ?)
-            )
-            AND t.date >= ?
-            AND t.date < ?
-            AND t.type = 'expense'
-            AND t.include_in_stats = 1
-        )
-        GROUP BY group_name
+            END
+          ), 0) as spent_amount
+        FROM budget_items bi
+        LEFT JOIN budget_item_categories bic ON bic.budget_item_id = bi.id
+        LEFT JOIN transactions t ON t.category_id = bic.category_id
+          AND t.date >= ?
+          AND t.date < ?
+          AND t.type = 'expense'
+          AND t.include_in_stats = 1
+        WHERE bi.is_active = 1
+          AND (
+            bi.budget_type != 'distributed'
+            OR (bi.valid_from < ? AND bi.valid_to >= ?)
+          )
+        GROUP BY bi.id
       `
 
       const spentResult = await window.electronAPI.db.query(spentQuery, [
         exchangeRate,
-        endDate,
-        startDate,
         startDate,
         endDate,
-      ]) as { group_name: string; spent_amount: number }[]
+        endDate,
+        startDate,
+      ]) as { budget_item_id: string; spent_amount: number }[]
 
       // 결과 병합
-      const spentMap = new Map(spentResult.map(r => [r.group_name, r.spent_amount]))
+      const spentMap = new Map(spentResult.map(r => [r.budget_item_id, r.spent_amount]))
       const result = budgetResult.map(b => ({
-        group_name: b.group_name,
+        budget_item_id: b.budget_item_id,
+        budget_item_name: b.budget_item_name,
         budget_amount: b.budget_amount,
-        spent_amount: spentMap.get(b.group_name) || 0,
+        spent_amount: spentMap.get(b.budget_item_id) || 0,
       }))
       setBudgetSummaries(result as BudgetSummary[])
     } catch (error) {
@@ -565,7 +548,7 @@ export default function Transactions() {
     },
     {
       field: 'budget_item_name',
-      headerName: '예산 항목',
+      headerName: '예산',
       width: 160,
       renderCell: (params: GridRenderCellParams<Transaction>) => (
         <FormControl size="small" fullWidth>
@@ -741,7 +724,7 @@ export default function Transactions() {
       {budgetSummaries.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-            예산 그룹별 지출
+            예산별 지출
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
             {budgetSummaries.map((budget) => {
@@ -753,11 +736,11 @@ export default function Transactions() {
               const overBudgetPercent = isOverBudget && budget.budget_amount > 0
                 ? Math.min((overAmount / budget.budget_amount) * 100, 50)
                 : 0
-              const isSelected = selectedGroups.has(budget.group_name)
+              const isSelected = selectedBudgetItem === budget.budget_item_id
               return (
                 <Card
-                  key={budget.group_name}
-                  onClick={() => toggleGroupSelection(budget.group_name)}
+                  key={budget.budget_item_id}
+                  onClick={() => toggleBudgetItemSelection(budget.budget_item_id)}
                   sx={{
                     cursor: 'pointer',
                     transition: 'all 0.2s',
@@ -770,40 +753,10 @@ export default function Transactions() {
                   }}
                 >
                   <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                      <Typography variant="body1" fontWeight={600}>
-                        {budget.group_name}
-                      </Typography>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          width: 100,
-                          height: 16,
-                          borderRadius: 8,
-                          overflow: 'hidden',
-                          bgcolor: 'grey.200',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: `${withinBudgetPercent}%`,
-                            bgcolor: 'success.main',
-                            transition: 'width 0.3s',
-                          }}
-                        />
-                        {isOverBudget && (
-                          <Box
-                            sx={{
-                              width: `${overBudgetPercent}%`,
-                              bgcolor: 'error.main',
-                              transition: 'width 0.3s',
-                            }}
-                          />
-                        )}
-                      </Box>
-                    </Stack>
-                    <Stack direction="row" alignItems="baseline" spacing={0.5}>
+                    <Typography variant="body1" fontWeight={600} sx={{ mb: 0.5 }}>
+                      {budget.budget_item_name}
+                    </Typography>
+                    <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 1 }}>
                       <Typography variant="h6" fontWeight={600}>
                         {Math.round(budget.spent_amount).toLocaleString()}
                       </Typography>
@@ -814,6 +767,33 @@ export default function Transactions() {
                         / {Math.round(budget.budget_amount).toLocaleString()}원
                       </Typography>
                     </Stack>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        width: '100%',
+                        height: 8,
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        bgcolor: 'grey.200',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: `${withinBudgetPercent}%`,
+                          bgcolor: 'success.main',
+                          transition: 'width 0.3s',
+                        }}
+                      />
+                      {isOverBudget && (
+                        <Box
+                          sx={{
+                            width: `${overBudgetPercent}%`,
+                            bgcolor: 'error.main',
+                            transition: 'width 0.3s',
+                          }}
+                        />
+                      )}
+                    </Box>
                   </CardContent>
                 </Card>
               )

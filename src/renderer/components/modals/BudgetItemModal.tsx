@@ -18,7 +18,6 @@ import {
   Checkbox,
   ListItemText,
   OutlinedInput,
-  Autocomplete,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
@@ -70,7 +69,6 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     valid_to: '',
     category_ids: [] as string[],
   })
-  const [existingGroups, setExistingGroups] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   const isEditMode = !!editItem
@@ -78,24 +76,12 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
   useEffect(() => {
     if (open) {
       loadCategories()
-      loadExistingGroups()
       if (editItem) {
         // 수정 모드: 기존 데이터 로드
         loadEditItemData()
       }
     }
   }, [open, editItem])
-
-  const loadExistingGroups = async () => {
-    try {
-      const result = await window.electronAPI.db.query(
-        'SELECT DISTINCT group_name FROM budget_items WHERE group_name IS NOT NULL ORDER BY group_name'
-      ) as { group_name: string }[]
-      setExistingGroups(result.map((r) => r.group_name))
-    } catch (error) {
-      console.error('Failed to load existing groups:', error)
-    }
-  }
 
   const loadEditItemData = async () => {
     if (!editItem) return
@@ -306,31 +292,12 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 1 }}>
           <TextField
-            label="예산 항목명"
+            label="예산명"
             placeholder="예: 식비, 통신비, 교육비"
             value={formData.name}
             onChange={(e) => handleChange('name', e.target.value)}
             fullWidth
             required
-          />
-
-          <Autocomplete
-            freeSolo
-            options={existingGroups}
-            inputValue={formData.group_name}
-            onInputChange={(_, value, reason) => {
-              if (reason !== 'reset') {
-                handleChange('group_name', value)
-              }
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="예산 그룹"
-                placeholder="예: 생활비, 교육비, 저축"
-                helperText="같은 그룹의 예산을 묶어서 관리합니다"
-              />
-            )}
           />
 
           <FormControl fullWidth>

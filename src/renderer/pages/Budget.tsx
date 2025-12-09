@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Typography,
@@ -13,14 +13,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Button,
-  Tabs,
-  Tab,
-  Badge,
 } from '@mui/material'
 import {
   IconEdit,
@@ -50,7 +48,8 @@ const budgetTypeLabels: Record<string, string> = {
   distributed: '분배',
 }
 
-const UNGROUPED_TAB = '__ungrouped__'
+type SortKey = 'name' | 'budget_type' | 'category_names' | 'base_amount' | 'monthly_amount'
+type SortOrder = 'asc' | 'desc'
 
 export default function Budget() {
   const { setPageTitle, setOnAdd } = usePageContext()
@@ -60,7 +59,8 @@ export default function Budget() {
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingItem, setDeletingItem] = useState<BudgetItem | null>(null)
-  const [selectedTab, setSelectedTab] = useState<string>(UNGROUPED_TAB)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
 
   // 환율
   const [exchangeRate, setExchangeRate] = useState(385)
@@ -160,26 +160,43 @@ export default function Budget() {
     setEditingItem(null)
   }
 
-  // 그룹 목록 계산
-  const groups = [...new Set(budgetItems.map((item) => item.group_name).filter(Boolean))] as string[]
-  const hasUngrouped = budgetItems.some((item) => !item.group_name)
-
-  // 선택된 탭에 따라 필터링된 예산 항목
-  const filteredItems = budgetItems.filter((item) => {
-    if (selectedTab === UNGROUPED_TAB) {
-      return !item.group_name
+  // 정렬 핸들러
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortOrder('asc')
     }
-    return item.group_name === selectedTab
-  })
+  }
+
+  // 정렬된 예산 항목
+  const sortedBudgetItems = useMemo(() => {
+    return [...budgetItems].sort((a, b) => {
+      let comparison = 0
+      switch (sortKey) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name, 'ko')
+          break
+        case 'budget_type':
+          comparison = a.budget_type.localeCompare(b.budget_type)
+          break
+        case 'category_names':
+          comparison = (a.category_names || '').localeCompare(b.category_names || '', 'ko')
+          break
+        case 'base_amount':
+          comparison = a.base_amount - b.base_amount
+          break
+        case 'monthly_amount':
+          comparison = getMonthlyAmount(a) - getMonthlyAmount(b)
+          break
+      }
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+  }, [budgetItems, sortKey, sortOrder])
 
   // 총 월 예산 계산
   const totalMonthlyBudget = budgetItems.reduce((sum, item) => {
-    const monthlyAmount = getMonthlyAmount(item)
-    return sum + (item.currency === 'AED' ? monthlyAmount * exchangeRate : monthlyAmount)
-  }, 0)
-
-  // 현재 탭의 월 예산 계산
-  const tabMonthlyBudget = filteredItems.reduce((sum, item) => {
     const monthlyAmount = getMonthlyAmount(item)
     return sum + (item.currency === 'AED' ? monthlyAmount * exchangeRate : monthlyAmount)
   }, 0)
@@ -222,91 +239,60 @@ export default function Budget() {
         </Card>
       ) : (
         <Card>
-          {/* 그룹 탭 */}
-          <Tabs
-            value={selectedTab}
-            onChange={(_, value) => setSelectedTab(value)}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
-          >
-            {hasUngrouped && (
-              <Tab
-                label={
-                  <Badge
-                    badgeContent={budgetItems.filter((i) => !i.group_name).length}
-                    sx={{
-                      '& .MuiBadge-badge': {
-                        right: -10,
-                        top: 2,
-                        bgcolor: selectedTab === UNGROUPED_TAB ? 'primary.main' : 'grey.300',
-                        color: selectedTab === UNGROUPED_TAB ? 'white' : 'grey.600',
-                        fontSize: 10,
-                        height: 16,
-                        minWidth: 16,
-                        padding: '0 4px',
-                      },
-                    }}
-                  >
-                    비그룹
-                  </Badge>
-                }
-                value={UNGROUPED_TAB}
-                sx={{ minWidth: 100 }}
-              />
-            )}
-            {groups.map((group) => (
-              <Tab
-                key={group}
-                label={
-                  <Badge
-                    badgeContent={budgetItems.filter((i) => i.group_name === group).length}
-                    sx={{
-                      '& .MuiBadge-badge': {
-                        right: -10,
-                        top: 2,
-                        bgcolor: selectedTab === group ? 'primary.main' : 'grey.300',
-                        color: selectedTab === group ? 'white' : 'grey.600',
-                        fontSize: 10,
-                        height: 16,
-                        minWidth: 16,
-                        padding: '0 4px',
-                      },
-                    }}
-                  >
-                    {group}
-                  </Badge>
-                }
-                value={group}
-                sx={{ minWidth: 100 }}
-              />
-            ))}
-          </Tabs>
-
-          {/* 탭별 예산 합계 */}
-          <Box sx={{ px: 3, py: 1.5, bgcolor: 'action.hover' }}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="body2" color="textSecondary">
-                {selectedTab === UNGROUPED_TAB ? '비그룹' : selectedTab} 월 예산:
-              </Typography>
-              <AmountText amount={tabMonthlyBudget} currency="KRW" fontWeight={600} />
-            </Stack>
-          </Box>
-
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>예산 항목</TableCell>
-                  <TableCell>유형</TableCell>
-                  <TableCell>연결 카테고리</TableCell>
-                  <TableCell align="right">기준 금액</TableCell>
-                  <TableCell align="right">월 예산</TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={sortKey === 'name'}
+                      direction={sortKey === 'name' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('name')}
+                    >
+                      예산 항목
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={sortKey === 'budget_type'}
+                      direction={sortKey === 'budget_type' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('budget_type')}
+                    >
+                      유형
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>
+                    <TableSortLabel
+                      active={sortKey === 'category_names'}
+                      direction={sortKey === 'category_names' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('category_names')}
+                    >
+                      연결 카테고리
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="right">
+                    <TableSortLabel
+                      active={sortKey === 'base_amount'}
+                      direction={sortKey === 'base_amount' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('base_amount')}
+                    >
+                      기준 금액
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="right">
+                    <TableSortLabel
+                      active={sortKey === 'monthly_amount'}
+                      direction={sortKey === 'monthly_amount' ? sortOrder : 'asc'}
+                      onClick={() => handleSort('monthly_amount')}
+                    >
+                      월 예산
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell align="center" width={80}></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredItems.map((item) => (
+                {sortedBudgetItems.map((item) => (
                     <TableRow key={item.id} hover>
                       <TableCell>
                         <Typography fontWeight={500}>{item.name}</Typography>
