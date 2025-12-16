@@ -383,8 +383,8 @@ export default function Transactions() {
         ? `${selectedYear + 1}-01-01`
         : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      // 분배 예산 항목 조회 (유효 기간 내)
-      const distributedBudgets = (await window.electronAPI.db.query(`
+      // 예산 항목 조회 (고정 월예산 + 분배 예산)
+      const budgets = (await window.electronAPI.db.query(`
         SELECT
           bi.id,
           bi.name,
@@ -396,44 +396,35 @@ export default function Transactions() {
           (SELECT bic.category_id FROM budget_item_categories bic WHERE bic.budget_item_id = bi.id LIMIT 1) as category_id
         FROM budget_items bi
         WHERE bi.is_active = 1
-          AND bi.budget_type = 'distributed'
-          AND bi.valid_from IS NOT NULL
-          AND bi.valid_to IS NOT NULL
-          AND bi.valid_from < ?
-          AND bi.valid_to >= ?
+          AND (
+            bi.budget_type = 'fixed_monthly'
+            OR (
+              bi.budget_type = 'distributed'
+              AND bi.valid_from IS NOT NULL
+              AND bi.valid_to IS NOT NULL
+              AND bi.valid_from < ?
+              AND bi.valid_to >= ?
+            )
+          )
       `, [targetMonthEnd, targetMonthStart])) as {
         id: string
         name: string
         budget_type: string
         base_amount: number
         currency: string
-        valid_from: string
-        valid_to: string
+        valid_from: string | null
+        valid_to: string | null
         category_id: string | null
       }[]
 
-      if (distributedBudgets.length === 0) {
-        alert('생성할 분배 예산 항목이 없습니다. (유효 기간 확인)')
+      if (budgets.length === 0) {
+        alert('생성할 예산 항목이 없습니다.')
         return
-      }
-
-      // 이미 생성된 거래가 있는지 확인
-      const existingCount = (await window.electronAPI.db.get(`
-        SELECT COUNT(*) as count FROM transactions
-        WHERE date >= ? AND date < ?
-          AND description LIKE '[분배]%'
-      `, [targetMonthStart, targetMonthEnd])) as { count: number }
-
-      if (existingCount.count > 0) {
-        if (!confirm(`이미 ${existingCount.count}건의 분배 거래가 있습니다. 추가로 생성하시겠습니까?`)) {
-          return
-        }
       }
 
       // 거래 생성
       const { v4: uuidv4 } = await import('uuid')
       let createdCount = 0
-      let skippedCount = 0
 
       // 월 수 계산 함수
       const calcMonths = (from: string, to: string) => {
@@ -443,15 +434,35 @@ export default function Transactions() {
         return Math.max(1, months)
       }
 
-      for (const budget of distributedBudgets) {
+      for (const budget of budgets) {
         if (!budget.category_id) {
           console.warn(`예산 항목 "${budget.name}"에 연결된 카테고리가 없습니다.`)
-          skippedCount++
           continue
         }
 
-        const months = calcMonths(budget.valid_from, budget.valid_to)
-        const monthlyAmount = Math.round(budget.base_amount / months)
+        let description: string
+        let monthlyAmount: number
+
+        if (budget.budget_type === 'distributed') {
+          const months = calcMonths(budget.valid_from!, budget.valid_to!)
+          description = `[분배] ${budget.name} (${months}개월)`
+          monthlyAmount = Math.round(budget.base_amount / months)
+        } else {
+          // fixed_monthly
+          description = `[고정] ${budget.name}`
+          monthlyAmount = budget.base_amount
+        }
+
+        // 동일한 내용의 거래가 이미 있는지 확인
+        const existing = (await window.electronAPI.db.get(`
+          SELECT COUNT(*) as count FROM transactions
+          WHERE date >= ? AND date < ?
+            AND description = ?
+        `, [targetMonthStart, targetMonthEnd, description])) as { count: number }
+
+        if (existing.count > 0) {
+          continue
+        }
 
         await window.electronAPI.db.query(`
           INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats)
@@ -462,14 +473,12 @@ export default function Transactions() {
           budget.currency,
           budget.category_id,
           targetMonthStart,
-          `[분배] ${budget.name} (${months}개월)`
+          description
         ])
         createdCount++
       }
 
-      const message = skippedCount > 0
-        ? `${createdCount}건의 분배 거래가 생성되었습니다. (${skippedCount}건 스킵: 카테고리 미연결)`
-        : `${createdCount}건의 분배 거래가 생성되었습니다.`
+      const message = `${createdCount}건의 거래가 생성되었습니다.`
       alert(message)
       loadTransactions()
       loadMonthsWithData()
@@ -663,7 +672,7 @@ export default function Transactions() {
             onClick={generateDistributedTransactions}
             variant="outlined"
           >
-            분배 거래 생성
+            자동 거래 생성
           </Button>
         }
       />
