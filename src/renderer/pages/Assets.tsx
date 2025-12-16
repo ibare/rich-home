@@ -6,8 +6,14 @@ import {
   Card,
   CardContent,
   Chip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material'
-import { IconHome, IconChartLine } from '@tabler/icons-react'
+import { IconHome, IconChartLine, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AssetModal from '../components/modals/AssetModal'
 import AmountText from '../components/shared/AmountText'
@@ -41,6 +47,8 @@ export default function Assets() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [exchangeRate, setExchangeRate] = useState(385)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null)
 
   useEffect(() => {
     setPageTitle('자산 관리')
@@ -94,6 +102,30 @@ export default function Assets() {
       month: 'long',
       day: 'numeric',
     })
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, asset: Asset) => {
+    e.stopPropagation()
+    setDeletingAsset(asset)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!deletingAsset) return
+
+    try {
+      await window.electronAPI.db.query(
+        'DELETE FROM assets WHERE id = ?',
+        [deletingAsset.id]
+      )
+
+      setDeleteDialogOpen(false)
+      setDeletingAsset(null)
+      loadData()
+    } catch (error) {
+      console.error('Failed to delete asset:', error)
+      alert('자산 삭제에 실패했습니다.')
+    }
   }
 
   const realEstateAssets = assets.filter((a) => a.type === 'real_estate')
@@ -216,12 +248,21 @@ export default function Assets() {
                           </Box>
                         </Stack>
 
-                        <AmountText
-                          amount={asset.purchase_amount}
-                          currency={asset.currency}
-                          variant="h5"
-                          fontWeight={600}
-                        />
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <AmountText
+                            amount={asset.purchase_amount}
+                            currency={asset.currency}
+                            variant="h5"
+                            fontWeight={600}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleDeleteClick(e, asset)}
+                            sx={{ color: 'error.main' }}
+                          >
+                            <IconTrash size={18} />
+                          </IconButton>
+                        </Stack>
                       </Stack>
                     </CardContent>
                   </Card>
@@ -280,23 +321,32 @@ export default function Assets() {
                           </Box>
                         </Stack>
 
-                        <Box textAlign="right">
-                          <AmountText
-                            amount={asset.purchase_amount * asset.quantity}
-                            currency={asset.currency}
-                            variant="h5"
-                            fontWeight={600}
-                          />
-                          <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
-                            <Typography variant="body2" color="textSecondary">@</Typography>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Box textAlign="right">
                             <AmountText
-                              amount={asset.purchase_amount}
+                              amount={asset.purchase_amount * asset.quantity}
                               currency={asset.currency}
-                              variant="body2"
-                              color="textSecondary"
+                              variant="h5"
+                              fontWeight={600}
                             />
-                          </Stack>
-                        </Box>
+                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                              <Typography variant="body2" color="textSecondary">@</Typography>
+                              <AmountText
+                                amount={asset.purchase_amount}
+                                currency={asset.currency}
+                                variant="body2"
+                                color="textSecondary"
+                              />
+                            </Stack>
+                          </Box>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleDeleteClick(e, asset)}
+                            sx={{ color: 'error.main' }}
+                          >
+                            <IconTrash size={18} />
+                          </IconButton>
+                        </Stack>
                       </Stack>
                     </CardContent>
                   </Card>
@@ -307,6 +357,24 @@ export default function Assets() {
         </Stack>
         </>
       )}
+
+      {/* 삭제 확인 다이얼로그 */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>자산 삭제</DialogTitle>
+        <DialogContent>
+          <Typography>
+            <strong>{deletingAsset?.name}</strong> 자산을 삭제하시겠습니까?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} color="inherit">
+            취소
+          </Button>
+          <Button onClick={handleDelete} color="error" variant="contained">
+            삭제
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <AssetModal
         open={modalOpen}

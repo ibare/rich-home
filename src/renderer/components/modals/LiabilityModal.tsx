@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -17,10 +17,24 @@ import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 
+interface Liability {
+  id: string
+  name: string
+  type: 'mortgage' | 'credit_loan' | 'jeonse_deposit' | 'car_loan' | 'other'
+  principal_amount: number
+  current_balance: number
+  interest_rate: number | null
+  start_date: string
+  end_date: string | null
+  currency: string
+  memo: string | null
+}
+
 interface LiabilityModalProps {
   open: boolean
   onClose: () => void
   onSaved: () => void
+  editItem?: Liability | null
 }
 
 const typeOptions = [
@@ -31,7 +45,7 @@ const typeOptions = [
   { value: 'other', label: '기타' },
 ]
 
-export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModalProps) {
+export default function LiabilityModal({ open, onClose, onSaved, editItem }: LiabilityModalProps) {
   const [formData, setFormData] = useState({
     type: 'mortgage',
     name: '',
@@ -44,6 +58,26 @@ export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModa
     memo: '',
   })
   const [saving, setSaving] = useState(false)
+
+  const isEditMode = !!editItem
+
+  useEffect(() => {
+    if (editItem) {
+      setFormData({
+        type: editItem.type,
+        name: editItem.name,
+        principal_amount: editItem.principal_amount.toLocaleString(),
+        current_balance: editItem.current_balance.toLocaleString(),
+        interest_rate: editItem.interest_rate?.toString() || '',
+        start_date: editItem.start_date,
+        end_date: editItem.end_date || '',
+        currency: editItem.currency,
+        memo: editItem.memo || '',
+      })
+    } else {
+      resetForm()
+    }
+  }, [editItem])
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -86,22 +120,41 @@ export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModa
 
     setSaving(true)
     try {
-      await window.electronAPI.db.query(
-        `INSERT INTO liabilities (id, name, type, principal_amount, current_balance, interest_rate, start_date, end_date, currency, memo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          uuidv4(),
-          formData.name,
-          formData.type,
-          principalAmount,
-          currentBalance,
-          interestRate,
-          formData.start_date,
-          formData.end_date || null,
-          formData.currency,
-          formData.memo || null,
-        ]
-      )
+      if (isEditMode && editItem) {
+        await window.electronAPI.db.query(
+          `UPDATE liabilities SET name = ?, type = ?, principal_amount = ?, current_balance = ?, interest_rate = ?, start_date = ?, end_date = ?, currency = ?, memo = ?
+           WHERE id = ?`,
+          [
+            formData.name,
+            formData.type,
+            principalAmount,
+            currentBalance,
+            interestRate,
+            formData.start_date,
+            formData.end_date || null,
+            formData.currency,
+            formData.memo || null,
+            editItem.id,
+          ]
+        )
+      } else {
+        await window.electronAPI.db.query(
+          `INSERT INTO liabilities (id, name, type, principal_amount, current_balance, interest_rate, start_date, end_date, currency, memo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            uuidv4(),
+            formData.name,
+            formData.type,
+            principalAmount,
+            currentBalance,
+            interestRate,
+            formData.start_date,
+            formData.end_date || null,
+            formData.currency,
+            formData.memo || null,
+          ]
+        )
+      }
 
       resetForm()
       onSaved()
@@ -136,7 +189,7 @@ export default function LiabilityModal({ open, onClose, onSaved }: LiabilityModa
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        부채 등록
+        {isEditMode ? '부채 수정' : '부채 등록'}
         <IconButton size="small" onClick={handleClose}>
           <IconX size={20} />
         </IconButton>

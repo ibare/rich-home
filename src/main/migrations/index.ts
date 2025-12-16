@@ -14,6 +14,7 @@ import { migration004 } from './004_transaction_include_stats'
 import { migration005 } from './005_simplify_budget'
 import { migration006 } from './006_budget_valid_period'
 import { migration007 } from './007_transaction_tag'
+import { migration008 } from './008_budget_account'
 
 export const migrations: Migration[] = [
   migration001,
@@ -23,6 +24,7 @@ export const migrations: Migration[] = [
   migration005,
   migration006,
   migration007,
+  migration008,
 ]
 
 export function runMigrations(db: BetterSqlite3.Database): void {

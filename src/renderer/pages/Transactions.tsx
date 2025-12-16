@@ -15,6 +15,8 @@ import {
   Select,
   MenuItem,
   FormControl,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import { IconTrash, IconPlus, IconCalendarPlus, IconEdit } from '@tabler/icons-react'
@@ -67,6 +69,10 @@ export default function Transactions() {
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<string | null>(null)
+  const [budgetDisplayCurrency, setBudgetDisplayCurrency] = useState<'KRW' | 'AED'>(() => {
+    const saved = localStorage.getItem('budget_display_currency')
+    return (saved === 'AED' || saved === 'KRW') ? saved : 'KRW'
+  })
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
   // 필터 - localStorage에서 마지막 선택한 년월 불러오기
@@ -84,6 +90,11 @@ export default function Transactions() {
     localStorage.setItem('transactions_selected_year', String(selectedYear))
     localStorage.setItem('transactions_selected_month', String(selectedMonth))
   }, [selectedYear, selectedMonth])
+
+  // 예산 표시 화폐 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('budget_display_currency', budgetDisplayCurrency)
+  }, [budgetDisplayCurrency])
 
   // 월별 데이터 존재 여부
   const [monthsWithData, setMonthsWithData] = useState<Set<number>>(new Set())
@@ -393,6 +404,7 @@ export default function Transactions() {
           bi.currency,
           bi.valid_from,
           bi.valid_to,
+          bi.account_id,
           (SELECT bic.category_id FROM budget_item_categories bic WHERE bic.budget_item_id = bi.id LIMIT 1) as category_id
         FROM budget_items bi
         WHERE bi.is_active = 1
@@ -414,6 +426,7 @@ export default function Transactions() {
         currency: string
         valid_from: string | null
         valid_to: string | null
+        account_id: string | null
         category_id: string | null
       }[]
 
@@ -449,7 +462,9 @@ export default function Transactions() {
           monthlyAmount = Math.round(budget.base_amount / months)
         } else {
           // fixed_monthly
-          description = `[고정] ${budget.name}`
+          description = budget.account_id
+            ? `[고정] ${budget.name} 🐷`
+            : `[고정] ${budget.name}`
           monthlyAmount = budget.base_amount
         }
 
@@ -475,6 +490,33 @@ export default function Transactions() {
           targetMonthStart,
           description
         ])
+
+        // 고정 예산에 계좌가 연결되어 있으면 해당 계좌 잔고에 금액 합산
+        if (budget.budget_type === 'fixed_monthly' && budget.account_id) {
+          // 해당 계좌의 가장 최근 잔고 조회
+          const latestBalance = (await window.electronAPI.db.get(`
+            SELECT balance FROM account_balances
+            WHERE account_id = ?
+            ORDER BY recorded_at DESC, created_at DESC
+            LIMIT 1
+          `, [budget.account_id])) as { balance: number } | undefined
+
+          const currentBalance = latestBalance?.balance || 0
+          const newBalance = currentBalance + monthlyAmount
+
+          // 새 잔고 추가
+          await window.electronAPI.db.query(`
+            INSERT INTO account_balances (id, account_id, balance, recorded_at, memo)
+            VALUES (?, ?, ?, ?, ?)
+          `, [
+            uuidv4(),
+            budget.account_id,
+            newBalance,
+            targetMonthStart,
+            `[자동] ${budget.name} 예산 적립`
+          ])
+        }
+
         createdCount++
       }
 
@@ -732,11 +774,33 @@ export default function Transactions() {
       {/* 예산별 집계 */}
       {budgetSummaries.length > 0 && (
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-            예산별 지출
-          </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle2" color="text.secondary">
+              예산별 지출
+            </Typography>
+            <ToggleButtonGroup
+              value={budgetDisplayCurrency}
+              exclusive
+              onChange={(_, value) => value && setBudgetDisplayCurrency(value)}
+              size="small"
+            >
+              <ToggleButton value="KRW" sx={{ px: 1.5, py: 0.25, fontSize: '0.75rem' }}>
+                KRW
+              </ToggleButton>
+              <ToggleButton value="AED" sx={{ px: 1.5, py: 0.25, fontSize: '0.75rem' }}>
+                AED
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Stack>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
             {budgetSummaries.map((budget) => {
+              const displaySpent = budgetDisplayCurrency === 'AED'
+                ? budget.spent_amount / exchangeRate
+                : budget.spent_amount
+              const displayBudget = budgetDisplayCurrency === 'AED'
+                ? budget.budget_amount / exchangeRate
+                : budget.budget_amount
+              const currencyUnit = budgetDisplayCurrency === 'AED' ? 'AED' : '원'
               const isOverBudget = budget.spent_amount > budget.budget_amount
               const overAmount = budget.spent_amount - budget.budget_amount
               const withinBudgetPercent = budget.budget_amount > 0
@@ -767,13 +831,16 @@ export default function Transactions() {
                     </Typography>
                     <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 1 }}>
                       <Typography variant="h6" fontWeight={600}>
-                        {Math.round(budget.spent_amount).toLocaleString()}
+                        {Math.round(displaySpent).toLocaleString()}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        원
+                        {currencyUnit}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                        / {Math.round(budget.budget_amount).toLocaleString()}원
+                        / {Math.round(displayBudget).toLocaleString()}
+                        <Typography component="span" variant="caption" sx={{ ml: 0.5 }}>
+                          {currencyUnit}
+                        </Typography>
                       </Typography>
                     </Stack>
                     <Box

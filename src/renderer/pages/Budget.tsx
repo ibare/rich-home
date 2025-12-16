@@ -39,6 +39,7 @@ interface BudgetItem {
   valid_from: string | null
   valid_to: string | null
   is_active: number
+  account_id: string | null
   category_names?: string
 }
 
@@ -94,7 +95,7 @@ export default function Budget() {
     try {
       const result = await window.electronAPI.db.query(`
         SELECT bi.id, bi.name, bi.group_name, bi.budget_type, bi.base_amount, bi.currency,
-               bi.memo, bi.valid_from, bi.valid_to, bi.is_active,
+               bi.memo, bi.valid_from, bi.valid_to, bi.is_active, bi.account_id,
                GROUP_CONCAT(c.name, ', ') as category_names
         FROM budget_items bi
         LEFT JOIN budget_item_categories bic ON bi.id = bic.budget_item_id

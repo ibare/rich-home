@@ -6,8 +6,9 @@ import {
   Card,
   CardContent,
   Chip,
+  IconButton,
 } from '@mui/material'
-import { IconHome, IconCreditCard, IconCar, IconReceipt } from '@tabler/icons-react'
+import { IconHome, IconCreditCard, IconCar, IconReceipt, IconEdit } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import LiabilityModal from '../components/modals/LiabilityModal'
 import AmountText from '../components/shared/AmountText'
@@ -48,6 +49,7 @@ export default function Liabilities() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [exchangeRate, setExchangeRate] = useState(385)
+  const [editingLiability, setEditingLiability] = useState<Liability | null>(null)
 
   useEffect(() => {
     setPageTitle('부채 관리')
@@ -95,6 +97,16 @@ export default function Liabilities() {
       return amount * exchangeRate
     }
     return amount
+  }
+
+  const handleEditClick = (liability: Liability) => {
+    setEditingLiability(liability)
+    setModalOpen(true)
+  }
+
+  const handleModalClose = () => {
+    setModalOpen(false)
+    setEditingLiability(null)
   }
 
   const totalLiabilities = liabilities.reduce(
@@ -194,26 +206,31 @@ export default function Liabilities() {
                       </Box>
                     </Stack>
 
-                    <Box textAlign="right">
-                      <AmountText
-                        amount={liability.current_balance}
-                        currency={liability.currency}
-                        variant="h5"
-                        fontWeight={600}
-                        color="error.main"
-                      />
-                      {liability.current_balance !== liability.principal_amount && (
-                        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
-                          <Typography variant="body2" color="textSecondary">원금:</Typography>
-                          <AmountText
-                            amount={liability.principal_amount}
-                            currency={liability.currency}
-                            variant="body2"
-                            color="textSecondary"
-                          />
-                        </Stack>
-                      )}
-                    </Box>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Box textAlign="right">
+                        <AmountText
+                          amount={liability.current_balance}
+                          currency={liability.currency}
+                          variant="h5"
+                          fontWeight={600}
+                          color="error.main"
+                        />
+                        {liability.current_balance !== liability.principal_amount && (
+                          <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                            <Typography variant="body2" color="textSecondary">원금:</Typography>
+                            <AmountText
+                              amount={liability.principal_amount}
+                              currency={liability.currency}
+                              variant="body2"
+                              color="textSecondary"
+                            />
+                          </Stack>
+                        )}
+                      </Box>
+                      <IconButton size="small" onClick={() => handleEditClick(liability)}>
+                        <IconEdit size={16} />
+                      </IconButton>
+                    </Stack>
                   </Stack>
                 </CardContent>
               </Card>
@@ -224,8 +241,9 @@ export default function Liabilities() {
 
       <LiabilityModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={handleModalClose}
         onSaved={loadData}
+        editItem={editingLiability}
       />
     </Box>
   )

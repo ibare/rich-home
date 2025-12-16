@@ -34,6 +34,14 @@ interface BudgetItem {
   valid_from: string | null
   valid_to: string | null
   category_ids?: string[]
+  account_id?: string | null
+}
+
+interface Account {
+  id: string
+  name: string
+  owner: string
+  currency: string
 }
 
 interface BudgetItemModalProps {
@@ -58,6 +66,7 @@ const budgetTypeOptions = [
 
 export default function BudgetItemModal({ open, onClose, onSaved, editItem }: BudgetItemModalProps) {
   const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [formData, setFormData] = useState({
     name: '',
     group_name: '',
@@ -68,6 +77,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     valid_from: '',
     valid_to: '',
     category_ids: [] as string[],
+    account_id: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -76,6 +86,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
   useEffect(() => {
     if (open) {
       loadCategories()
+      loadAccounts()
       if (editItem) {
         // 수정 모드: 기존 데이터 로드
         loadEditItemData()
@@ -103,6 +114,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
         valid_from: editItem.valid_from || '',
         valid_to: editItem.valid_to || '',
         category_ids: categoryResult.map((r) => r.category_id),
+        account_id: editItem.account_id || '',
       })
     } catch (error) {
       console.error('Failed to load edit item data:', error)
@@ -117,6 +129,17 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       setCategories(result as Category[])
     } catch (error) {
       console.error('Failed to load categories:', error)
+    }
+  }
+
+  const loadAccounts = async () => {
+    try {
+      const result = await window.electronAPI.db.query(
+        'SELECT id, name, owner, currency FROM accounts WHERE is_active = 1 ORDER BY owner, name'
+      )
+      setAccounts(result as Account[])
+    } catch (error) {
+      console.error('Failed to load accounts:', error)
     }
   }
 
@@ -185,10 +208,13 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
 
     setSaving(true)
     try {
+      // 고정 예산이 아닌 경우 account_id는 null
+      const accountId = formData.budget_type === 'fixed_monthly' ? (formData.account_id || null) : null
+
       if (isEditMode && editItem) {
         // 수정 모드
         await window.electronAPI.db.query(
-          `UPDATE budget_items SET name = ?, group_name = ?, budget_type = ?, base_amount = ?, currency = ?, memo = ?, valid_from = ?, valid_to = ?, updated_at = datetime('now')
+          `UPDATE budget_items SET name = ?, group_name = ?, budget_type = ?, base_amount = ?, currency = ?, memo = ?, valid_from = ?, valid_to = ?, account_id = ?, updated_at = datetime('now')
            WHERE id = ?`,
           [
             formData.name,
@@ -199,6 +225,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             formData.memo || null,
             formData.valid_from || null,
             formData.valid_to || null,
+            accountId,
             editItem.id,
           ]
         )
@@ -221,8 +248,8 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
         const budgetItemId = uuidv4()
 
         await window.electronAPI.db.query(
-          `INSERT INTO budget_items (id, name, group_name, budget_type, base_amount, currency, memo, valid_from, valid_to)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO budget_items (id, name, group_name, budget_type, base_amount, currency, memo, valid_from, valid_to, account_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             budgetItemId,
             formData.name,
@@ -233,6 +260,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             formData.memo || null,
             formData.valid_from || null,
             formData.valid_to || null,
+            accountId,
           ]
         )
 
@@ -267,6 +295,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       valid_from: '',
       valid_to: '',
       category_ids: [],
+      account_id: '',
     })
   }
 
@@ -358,6 +387,30 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
               </Typography>
             )}
           </Box>
+
+          {/* 고정 예산일 경우 계좌 연결 */}
+          {formData.budget_type === 'fixed_monthly' && (
+            <FormControl fullWidth>
+              <InputLabel>연결 계좌 (선택)</InputLabel>
+              <Select
+                value={formData.account_id}
+                label="연결 계좌 (선택)"
+                onChange={(e) => handleChange('account_id', e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>선택 안함</em>
+                </MenuItem>
+                {accounts.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.name} ({account.owner === 'self' ? '본인' : account.owner === 'spouse' ? '배우자' : '자녀'} · {account.currency})
+                  </MenuItem>
+                ))}
+              </Select>
+              <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5 }}>
+                계좌를 연결하면 자동 거래 생성 시 해당 계좌 잔고에 금액이 합산됩니다.
+              </Typography>
+            </FormControl>
+          )}
 
           <FormControl fullWidth>
             <InputLabel>연결 카테고리</InputLabel>
