@@ -70,6 +70,7 @@ export default function Transactions() {
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<string | null>(null)
+  const [selectedBudgetCategoryIds, setSelectedBudgetCategoryIds] = useState<string[]>([])
   const [budgetDisplayCurrency, setBudgetDisplayCurrency] = useState<'KRW' | 'AED'>(() => {
     const saved = localStorage.getItem('budget_display_currency')
     return (saved === 'AED' || saved === 'KRW') ? saved : 'KRW'
@@ -114,6 +115,7 @@ export default function Transactions() {
     loadTransactions()
     loadBudgetSummaries()
     setSelectedBudgetItem(null) // 월 변경 시 선택 초기화
+    setSelectedBudgetCategoryIds([])
   }, [selectedYear, selectedMonth, exchangeRate])
 
   useEffect(() => {
@@ -148,14 +150,30 @@ export default function Transactions() {
   }
 
   // 예산 항목 선택 토글 (단일 선택)
-  const toggleBudgetItemSelection = (budgetItemId: string) => {
-    setSelectedBudgetItem((prev) => prev === budgetItemId ? null : budgetItemId)
+  const toggleBudgetItemSelection = async (budgetItemId: string) => {
+    if (selectedBudgetItem === budgetItemId) {
+      // 선택 해제
+      setSelectedBudgetItem(null)
+      setSelectedBudgetCategoryIds([])
+    } else {
+      // 선택: 해당 예산에 연결된 카테고리 ID들 조회
+      try {
+        const result = await window.electronAPI.db.query(
+          'SELECT category_id FROM budget_item_categories WHERE budget_item_id = ?',
+          [budgetItemId]
+        ) as { category_id: string }[]
+        setSelectedBudgetItem(budgetItemId)
+        setSelectedBudgetCategoryIds(result.map(r => r.category_id))
+      } catch (error) {
+        console.error('Failed to load budget categories:', error)
+      }
+    }
   }
 
-  // 선택된 예산 항목에 따른 거래내역 필터링
+  // 선택된 예산 항목에 따른 거래내역 필터링 (카테고리 기반)
   const filteredTransactions = selectedBudgetItem === null
     ? transactions
-    : transactions.filter((t) => t.budget_item_id === selectedBudgetItem)
+    : transactions.filter((t) => selectedBudgetCategoryIds.includes(t.category_id))
 
   // 해당 연도의 월별 데이터 존재 여부 조회
   const loadMonthsWithData = async () => {
