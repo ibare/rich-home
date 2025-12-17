@@ -49,6 +49,7 @@ interface BudgetSummary {
   budget_type: string
   budget_amount: number
   spent_amount: number
+  auto_generate: number
 }
 
 interface BudgetItem {
@@ -201,21 +202,21 @@ export default function Transactions() {
           : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
       const query = `
-        SELECT t.*, c.name as category_name,
+        SELECT t.*, COALESCE(c.name, '(카테고리 없음)') as category_name,
           (SELECT bi.id FROM budget_item_categories bic
            JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-           WHERE bic.category_id = c.id
+           WHERE bic.category_id = t.category_id
            LIMIT 1) as budget_item_id,
           (SELECT bi.name FROM budget_item_categories bic
            JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-           WHERE bic.category_id = c.id
+           WHERE bic.category_id = t.category_id
            LIMIT 1) as budget_item_name,
           (SELECT COALESCE(bi.group_name, '미분류') FROM budget_item_categories bic
            JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-           WHERE bic.category_id = c.id
+           WHERE bic.category_id = t.category_id
            LIMIT 1) as budget_group_name
         FROM transactions t
-        JOIN categories c ON t.category_id = c.id
+        LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.date >= ? AND t.date < ?
         ORDER BY t.date DESC, t.created_at DESC
       `
@@ -246,6 +247,7 @@ export default function Transactions() {
           bi.id as budget_item_id,
           bi.name as budget_item_name,
           bi.budget_type,
+          bi.auto_generate,
           CASE
             WHEN bi.budget_type = 'distributed' AND bi.valid_from IS NOT NULL AND bi.valid_to IS NOT NULL THEN
               CASE WHEN bi.currency = 'AED'
@@ -278,7 +280,7 @@ export default function Transactions() {
         exchangeRate,
         endDate,
         startDate,
-      ]) as { budget_item_id: string; budget_item_name: string; budget_type: string; budget_amount: number }[]
+      ]) as { budget_item_id: string; budget_item_name: string; budget_type: string; auto_generate: number; budget_amount: number }[]
 
       // 예산 항목별 지출 집계
       const spentQuery = `
@@ -321,6 +323,7 @@ export default function Transactions() {
         budget_type: b.budget_type,
         budget_amount: b.budget_amount,
         spent_amount: spentMap.get(b.budget_item_id) || 0,
+        auto_generate: b.auto_generate,
       }))
       setBudgetSummaries(result as BudgetSummary[])
     } catch (error) {
@@ -415,7 +418,7 @@ export default function Transactions() {
         ? `${selectedYear + 1}-01-01`
         : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      // 예산 항목 조회 (고정 월예산 + 분배 예산)
+      // 예산 항목 조회 (자동생성 고정 월예산 + 분배 예산)
       const budgets = (await window.electronAPI.db.query(`
         SELECT
           bi.id,
@@ -430,7 +433,7 @@ export default function Transactions() {
         FROM budget_items bi
         WHERE bi.is_active = 1
           AND (
-            bi.budget_type = 'fixed_monthly'
+            (bi.budget_type = 'fixed_monthly' AND bi.auto_generate = 1)
             OR (
               bi.budget_type = 'distributed'
               AND bi.valid_from IS NOT NULL
@@ -814,7 +817,7 @@ export default function Transactions() {
             </ToggleButtonGroup>
           </Stack>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
-            {budgetSummaries.filter((b) => b.budget_type !== 'distributed').map((budget) => {
+            {budgetSummaries.filter((b) => b.budget_type !== 'distributed' && b.auto_generate !== 1).map((budget) => {
               const displaySpent = budgetDisplayCurrency === 'AED'
                 ? budget.spent_amount / exchangeRate
                 : budget.spent_amount

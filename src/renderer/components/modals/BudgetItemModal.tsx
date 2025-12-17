@@ -7,6 +7,7 @@ import {
   Button,
   TextField,
   FormControl,
+  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
@@ -35,6 +36,7 @@ interface BudgetItem {
   valid_to: string | null
   category_ids?: string[]
   account_id?: string | null
+  auto_generate?: number
 }
 
 interface Account {
@@ -78,6 +80,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     valid_to: '',
     category_ids: [] as string[],
     account_id: '',
+    auto_generate: false,
   })
   const [saving, setSaving] = useState(false)
 
@@ -115,6 +118,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
         valid_to: editItem.valid_to || '',
         category_ids: categoryResult.map((r) => r.category_id),
         account_id: editItem.account_id || '',
+        auto_generate: editItem.auto_generate === 1,
       })
     } catch (error) {
       console.error('Failed to load edit item data:', error)
@@ -208,13 +212,14 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
 
     setSaving(true)
     try {
-      // 고정 예산이 아닌 경우 account_id는 null
+      // 고정 예산이 아닌 경우 account_id는 null, auto_generate는 0
       const accountId = formData.budget_type === 'fixed_monthly' ? (formData.account_id || null) : null
+      const autoGenerate = formData.budget_type === 'fixed_monthly' ? (formData.auto_generate ? 1 : 0) : 0
 
       if (isEditMode && editItem) {
         // 수정 모드
         await window.electronAPI.db.query(
-          `UPDATE budget_items SET name = ?, group_name = ?, budget_type = ?, base_amount = ?, currency = ?, memo = ?, valid_from = ?, valid_to = ?, account_id = ?, updated_at = datetime('now')
+          `UPDATE budget_items SET name = ?, group_name = ?, budget_type = ?, base_amount = ?, currency = ?, memo = ?, valid_from = ?, valid_to = ?, account_id = ?, auto_generate = ?, updated_at = datetime('now')
            WHERE id = ?`,
           [
             formData.name,
@@ -226,6 +231,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             formData.valid_from || null,
             formData.valid_to || null,
             accountId,
+            autoGenerate,
             editItem.id,
           ]
         )
@@ -248,8 +254,8 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
         const budgetItemId = uuidv4()
 
         await window.electronAPI.db.query(
-          `INSERT INTO budget_items (id, name, group_name, budget_type, base_amount, currency, memo, valid_from, valid_to, account_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO budget_items (id, name, group_name, budget_type, base_amount, currency, memo, valid_from, valid_to, account_id, auto_generate)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             budgetItemId,
             formData.name,
@@ -261,6 +267,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             formData.valid_from || null,
             formData.valid_to || null,
             accountId,
+            autoGenerate,
           ]
         )
 
@@ -296,6 +303,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       valid_to: '',
       category_ids: [],
       account_id: '',
+      auto_generate: false,
     })
   }
 
@@ -388,28 +396,46 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             )}
           </Box>
 
-          {/* 고정 예산일 경우 계좌 연결 */}
+          {/* 고정 예산일 경우 자동 생성 및 계좌 연결 */}
           {formData.budget_type === 'fixed_monthly' && (
-            <FormControl fullWidth>
-              <InputLabel>연결 계좌 (선택)</InputLabel>
-              <Select
-                value={formData.account_id}
-                label="연결 계좌 (선택)"
-                onChange={(e) => handleChange('account_id', e.target.value)}
-              >
-                <MenuItem value="">
-                  <em>선택 안함</em>
-                </MenuItem>
-                {accounts.map((account) => (
-                  <MenuItem key={account.id} value={account.id}>
-                    {account.name} ({account.owner === 'self' ? '본인' : account.owner === 'spouse' ? '배우자' : '자녀'} · {account.currency})
+            <>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={formData.auto_generate}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, auto_generate: e.target.checked }))}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2">자동 거래 생성</Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      체크하면 매월 자동으로 거래가 생성됩니다
+                    </Typography>
+                  </Box>
+                }
+              />
+              <FormControl fullWidth>
+                <InputLabel>연결 계좌 (선택)</InputLabel>
+                <Select
+                  value={formData.account_id}
+                  label="연결 계좌 (선택)"
+                  onChange={(e) => handleChange('account_id', e.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>선택 안함</em>
                   </MenuItem>
-                ))}
-              </Select>
-              <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5 }}>
-                계좌를 연결하면 자동 거래 생성 시 해당 계좌 잔고에 금액이 합산됩니다.
-              </Typography>
-            </FormControl>
+                  {accounts.map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.name} ({account.owner === 'self' ? '본인' : account.owner === 'spouse' ? '배우자' : '자녀'} · {account.currency})
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5 }}>
+                  계좌를 연결하면 자동 거래 생성 시 해당 계좌 잔고에 금액이 합산됩니다.
+                </Typography>
+              </FormControl>
+            </>
           )}
 
           <FormControl fullWidth>
