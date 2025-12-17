@@ -46,6 +46,7 @@ interface Transaction {
 interface BudgetSummary {
   budget_item_id: string
   budget_item_name: string
+  budget_type: string
   budget_amount: number
   spent_amount: number
 }
@@ -226,6 +227,7 @@ export default function Transactions() {
         SELECT
           bi.id as budget_item_id,
           bi.name as budget_item_name,
+          bi.budget_type,
           CASE
             WHEN bi.budget_type = 'distributed' AND bi.valid_from IS NOT NULL AND bi.valid_to IS NOT NULL THEN
               CASE WHEN bi.currency = 'AED'
@@ -258,7 +260,7 @@ export default function Transactions() {
         exchangeRate,
         endDate,
         startDate,
-      ]) as { budget_item_id: string; budget_item_name: string; budget_amount: number }[]
+      ]) as { budget_item_id: string; budget_item_name: string; budget_type: string; budget_amount: number }[]
 
       // 예산 항목별 지출 집계
       const spentQuery = `
@@ -298,6 +300,7 @@ export default function Transactions() {
       const result = budgetResult.map(b => ({
         budget_item_id: b.budget_item_id,
         budget_item_name: b.budget_item_name,
+        budget_type: b.budget_type,
         budget_amount: b.budget_amount,
         spent_amount: spentMap.get(b.budget_item_id) || 0,
       }))
@@ -793,7 +796,7 @@ export default function Transactions() {
             </ToggleButtonGroup>
           </Stack>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
-            {budgetSummaries.map((budget) => {
+            {budgetSummaries.filter((b) => b.budget_type !== 'distributed').map((budget) => {
               const displaySpent = budgetDisplayCurrency === 'AED'
                 ? budget.spent_amount / exchangeRate
                 : budget.spent_amount
@@ -820,6 +823,7 @@ export default function Transactions() {
                     border: 2,
                     borderColor: isSelected ? 'primary.main' : 'transparent',
                     bgcolor: isSelected ? 'primary.50' : 'background.paper',
+                    opacity: selectedBudgetItem && !isSelected ? 0.4 : 1,
                     '&:hover': {
                       borderColor: isSelected ? 'primary.main' : 'grey.300',
                     },
@@ -829,47 +833,51 @@ export default function Transactions() {
                     <Typography variant="body1" fontWeight={600} sx={{ mb: 0.5 }}>
                       {budget.budget_item_name}
                     </Typography>
-                    <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 1 }}>
+                    <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: budget.budget_type === 'variable_monthly' ? 1 : 0 }}>
                       <Typography variant="h6" fontWeight={600}>
                         {Math.round(displaySpent).toLocaleString()}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {currencyUnit}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                        / {Math.round(displayBudget).toLocaleString()}
-                        <Typography component="span" variant="caption" sx={{ ml: 0.5 }}>
-                          {currencyUnit}
+                      {budget.budget_type === 'variable_monthly' && (
+                        <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                          / {Math.round(displayBudget).toLocaleString()}
+                          <Typography component="span" variant="caption" sx={{ ml: 0.5 }}>
+                            {currencyUnit}
+                          </Typography>
                         </Typography>
-                      </Typography>
+                      )}
                     </Stack>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        width: '100%',
-                        height: 8,
-                        borderRadius: 4,
-                        overflow: 'hidden',
-                        bgcolor: 'grey.200',
-                      }}
-                    >
+                    {budget.budget_type === 'variable_monthly' && (
                       <Box
                         sx={{
-                          width: `${withinBudgetPercent}%`,
-                          bgcolor: 'success.main',
-                          transition: 'width 0.3s',
+                          display: 'flex',
+                          width: '100%',
+                          height: 8,
+                          borderRadius: 4,
+                          overflow: 'hidden',
+                          bgcolor: 'grey.200',
                         }}
-                      />
-                      {isOverBudget && (
+                      >
                         <Box
                           sx={{
-                            width: `${overBudgetPercent}%`,
-                            bgcolor: 'error.main',
+                            width: `${withinBudgetPercent}%`,
+                            bgcolor: 'success.main',
                             transition: 'width 0.3s',
                           }}
                         />
-                      )}
-                    </Box>
+                        {isOverBudget && (
+                          <Box
+                            sx={{
+                              width: `${overBudgetPercent}%`,
+                              bgcolor: 'error.main',
+                              transition: 'width 0.3s',
+                            }}
+                          />
+                        )}
+                      </Box>
+                    )}
                   </CardContent>
                 </Card>
               )
