@@ -8,12 +8,16 @@ import {
   TextField,
   FormControl,
   FormLabel,
+  InputLabel,
+  Select,
+  MenuItem,
   Stack,
   IconButton,
   RadioGroup,
   FormControlLabel,
   Radio,
   Box,
+  Typography,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
@@ -74,6 +78,10 @@ export default function CategoryModal({
     color: colorOptions[0],
   })
   const [saving, setSaving] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [transactionCount, setTransactionCount] = useState(0)
+  const [replacementCategoryId, setReplacementCategoryId] = useState('')
+  const [availableCategories, setAvailableCategories] = useState<Category[]>([])
 
   const isEditing = !!editingCategory
 
@@ -159,7 +167,74 @@ export default function CategoryModal({
       expense_type: 'variable',
       color: colorOptions[0],
     })
+    setDeleteDialogOpen(false)
     onClose()
+  }
+
+  const handleDeleteClick = async () => {
+    if (!editingCategory) return
+
+    try {
+      // 해당 카테고리를 사용하는 거래 수 확인
+      const result = await window.electronAPI.db.get(
+        'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?',
+        [editingCategory.id]
+      ) as { count: number }
+      setTransactionCount(result.count)
+
+      // 대체 가능한 카테고리 목록 조회 (같은 타입의 카테고리만)
+      if (result.count > 0) {
+        const categories = await window.electronAPI.db.query(
+          'SELECT * FROM categories WHERE is_active = 1 AND id != ? AND type = ? ORDER BY expense_type, sort_order',
+          [editingCategory.id, editingCategory.type]
+        ) as Category[]
+        setAvailableCategories(categories)
+        setReplacementCategoryId('')
+      }
+
+      setDeleteDialogOpen(true)
+    } catch (error) {
+      console.error('Failed to check transactions:', error)
+      alert('삭제 확인 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!editingCategory) return
+
+    // 연결된 거래가 있으면 대체 카테고리 필수
+    if (transactionCount > 0 && !replacementCategoryId) {
+      alert('대체 카테고리를 선택해주세요.')
+      return
+    }
+
+    try {
+      // 연결된 거래가 있으면 대체 카테고리로 변경
+      if (transactionCount > 0 && replacementCategoryId) {
+        await window.electronAPI.db.query(
+          'UPDATE transactions SET category_id = ? WHERE category_id = ?',
+          [replacementCategoryId, editingCategory.id]
+        )
+      }
+
+      // 예산 항목 연결 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM budget_item_categories WHERE category_id = ?',
+        [editingCategory.id]
+      )
+      // 카테고리 삭제
+      await window.electronAPI.db.query(
+        'DELETE FROM categories WHERE id = ?',
+        [editingCategory.id]
+      )
+
+      setDeleteDialogOpen(false)
+      onSaved()
+      handleClose()
+    } catch (error) {
+      console.error('Failed to delete category:', error)
+      alert('카테고리 삭제에 실패했습니다.')
+    }
   }
 
   return (
@@ -248,14 +323,66 @@ export default function CategoryModal({
         </Stack>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose} color="inherit">
-          취소
-        </Button>
-        <Button onClick={handleSubmit} variant="contained" disabled={saving}>
-          {saving ? '저장 중...' : '저장'}
-        </Button>
+      <DialogActions sx={{ px: 3, pb: 2, justifyContent: isEditing ? 'space-between' : 'flex-end' }}>
+        {isEditing && (
+          <Button onClick={handleDeleteClick} color="error">
+            삭제
+          </Button>
+        )}
+        <Stack direction="row" spacing={1}>
+          <Button onClick={handleClose} color="inherit">
+            취소
+          </Button>
+          <Button onClick={handleSubmit} variant="contained" disabled={saving}>
+            {saving ? '저장 중...' : '저장'}
+          </Button>
+        </Stack>
       </DialogActions>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>카테고리 삭제</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: transactionCount > 0 ? 2 : 0 }}>
+            <strong>{editingCategory?.name}</strong> 카테고리를 삭제하시겠습니까?
+          </Typography>
+          {transactionCount > 0 && (
+            <Stack spacing={2}>
+              <Typography color="warning.main" variant="body2">
+                이 카테고리를 사용하는 거래가 {transactionCount}건 있습니다.
+                대체할 카테고리를 선택해주세요.
+              </Typography>
+              <FormControl fullWidth size="small">
+                <InputLabel>대체 카테고리</InputLabel>
+                <Select
+                  value={replacementCategoryId}
+                  label="대체 카테고리"
+                  onChange={(e) => setReplacementCategoryId(e.target.value)}
+                >
+                  {availableCategories.map((cat) => (
+                    <MenuItem key={cat.id} value={cat.id}>
+                      {cat.name} ({cat.expense_type === 'fixed' ? '고정비' : '변동비'})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} color="inherit">
+            취소
+          </Button>
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            disabled={transactionCount > 0 && !replacementCategoryId}
+          >
+            삭제
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   )
 }
