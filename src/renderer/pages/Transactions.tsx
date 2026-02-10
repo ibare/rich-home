@@ -816,8 +816,8 @@ export default function Transactions() {
               </ToggleButton>
             </ToggleButtonGroup>
           </Stack>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
-            {budgetSummaries.filter((b) => b.budget_type !== 'distributed' && b.auto_generate !== 1).map((budget) => {
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 2 }}>
+            {budgetSummaries.map((budget) => {
               const displaySpent = budgetDisplayCurrency === 'AED'
                 ? budget.spent_amount / exchangeRate
                 : budget.spent_amount
@@ -825,6 +825,11 @@ export default function Transactions() {
                 ? budget.budget_amount / exchangeRate
                 : budget.budget_amount
               const currencyUnit = budgetDisplayCurrency === 'AED' ? 'AED' : '원'
+              const formatKRW = (amount: number) => {
+                const rounded = Math.round(amount)
+                if (rounded >= 10000) return `${Math.round(rounded / 10000)}만`
+                return rounded.toLocaleString()
+              }
               const isOverBudget = budget.spent_amount > budget.budget_amount
               const overAmount = budget.spent_amount - budget.budget_amount
               const withinBudgetPercent = budget.budget_amount > 0
@@ -841,7 +846,7 @@ export default function Transactions() {
                   sx={{
                     cursor: 'pointer',
                     transition: 'all 0.2s',
-                    border: 2,
+                    border: 1,
                     borderColor: isSelected ? 'primary.main' : 'transparent',
                     bgcolor: isSelected ? 'primary.50' : 'background.paper',
                     opacity: selectedBudgetItem && !isSelected ? 0.4 : 1,
@@ -850,55 +855,45 @@ export default function Transactions() {
                     },
                   }}
                 >
-                  <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
-                    <Typography variant="body1" fontWeight={600} sx={{ mb: 0.5 }}>
-                      {budget.budget_item_name}
-                    </Typography>
-                    <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: budget.budget_type === 'variable_monthly' ? 1 : 0 }}>
-                      <Typography variant="h6" fontWeight={600}>
-                        {Math.round(displaySpent).toLocaleString()}
+                  <CardContent sx={{ py: 1.5, px: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {budget.budget_item_name}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {currencyUnit}
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                        {budgetDisplayCurrency === 'KRW'
+                          ? `${formatKRW(displaySpent)} / ${formatKRW(displayBudget)}원`
+                          : `${Math.round(displaySpent).toLocaleString()} / ${Math.round(displayBudget).toLocaleString()} AED`
+                        }
                       </Typography>
-                      {budget.budget_type === 'variable_monthly' && (
-                        <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                          / {Math.round(displayBudget).toLocaleString()}
-                          <Typography component="span" variant="caption" sx={{ ml: 0.5 }}>
-                            {currencyUnit}
-                          </Typography>
-                        </Typography>
-                      )}
                     </Stack>
-                    {budget.budget_type === 'variable_monthly' && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        width: '100%',
+                        height: 2,
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        bgcolor: 'grey.200',
+                      }}
+                    >
                       <Box
                         sx={{
-                          display: 'flex',
-                          width: '100%',
-                          height: 8,
-                          borderRadius: 4,
-                          overflow: 'hidden',
-                          bgcolor: 'grey.200',
+                          width: `${withinBudgetPercent}%`,
+                          bgcolor: 'success.main',
+                          transition: 'width 0.3s',
                         }}
-                      >
+                      />
+                      {isOverBudget && (
                         <Box
                           sx={{
-                            width: `${withinBudgetPercent}%`,
-                            bgcolor: 'success.main',
+                            width: `${overBudgetPercent}%`,
+                            bgcolor: 'error.main',
                             transition: 'width 0.3s',
                           }}
                         />
-                        {isOverBudget && (
-                          <Box
-                            sx={{
-                              width: `${overBudgetPercent}%`,
-                              bgcolor: 'error.main',
-                              transition: 'width 0.3s',
-                            }}
-                          />
-                        )}
-                      </Box>
-                    )}
+                      )}
+                    </Box>
                   </CardContent>
                 </Card>
               )

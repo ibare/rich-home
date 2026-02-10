@@ -36,6 +36,7 @@ interface BalanceRecord {
   account_id: string
   balance: number
   recorded_at: string
+  memo: string | null
 }
 
 const ownerLabels: Record<string, string> = {
@@ -197,49 +198,38 @@ export default function AccountBalanceHistory() {
                 <TableHead>
                   <TableRow>
                     <TableCell>기록일시</TableCell>
+                    <TableCell>메모</TableCell>
                     <TableCell align="right">잔고</TableCell>
-                    <TableCell align="right">변동</TableCell>
                     <TableCell align="center" width={60}></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {balances.map((record, index) => {
-                    const prevBalance = balances[index + 1]?.balance ?? record.balance
-                    const diff = record.balance - prevBalance
-                    return (
-                      <TableRow key={record.id} hover>
-                        <TableCell>{formatDate(record.recorded_at)}</TableCell>
-                        <TableCell align="right">
-                          <AmountText
-                            amount={record.balance}
-                            currency={account.currency}
-                            fontWeight={500}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          {index < balances.length - 1 && (
-                            <AmountText
-                              amount={diff}
-                              currency={account.currency}
-                              fontWeight={500}
-                              color={diff > 0 ? 'success.main' : diff < 0 ? 'error.main' : 'textSecondary'}
-                              showSign
-                              signType="auto"
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell align="center">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleDelete(record.id)}
-                            color="error"
-                          >
-                            <IconTrash size={16} />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
+                  {balances.map((record) => (
+                    <TableRow key={record.id} hover>
+                      <TableCell>{formatDate(record.recorded_at)}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {record.memo || ''}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <AmountText
+                          amount={record.balance}
+                          currency={account.currency}
+                          fontWeight={500}
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDelete(record.id)}
+                          color="error"
+                        >
+                          <IconTrash size={16} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>
