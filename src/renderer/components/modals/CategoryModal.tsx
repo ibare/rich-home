@@ -185,7 +185,7 @@ export default function CategoryModal({
       // 대체 가능한 카테고리 목록 조회 (같은 타입의 카테고리만)
       if (result.count > 0) {
         const categories = await window.electronAPI.db.query(
-          'SELECT * FROM categories WHERE is_active = 1 AND id != ? AND type = ? ORDER BY expense_type, sort_order',
+          'SELECT * FROM categories WHERE is_active = 1 AND id != ? AND type = ? ORDER BY expense_type, name',
           [editingCategory.id, editingCategory.type]
         ) as Category[]
         setAvailableCategories(categories)

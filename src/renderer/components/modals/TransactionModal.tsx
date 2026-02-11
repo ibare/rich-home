@@ -6,10 +6,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Stack,
   IconButton,
   ToggleButton,
@@ -31,6 +27,7 @@ import {
 import { IconX, IconPlus, IconTrash } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
+import CategoryPicker from '../shared/CategoryPicker'
 
 interface EditTransaction {
   id: string
@@ -103,6 +100,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     tags: [] as string[],
   })
   const [saving, setSaving] = useState(false)
+  const [categoryAnchorEl, setCategoryAnchorEl] = useState<HTMLElement | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const [descriptionSuggestions, setDescriptionSuggestions] = useState<string[]>([])
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([])
@@ -140,7 +138,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   const loadCategories = async () => {
     try {
       const result = await window.electronAPI.db.query(
-        'SELECT * FROM categories WHERE is_active = 1 ORDER BY type, expense_type, sort_order'
+        'SELECT * FROM categories WHERE is_active = 1 ORDER BY type, expense_type, name'
       )
       setCategories(result as Category[])
     } catch (error) {
@@ -372,11 +370,6 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   }
 
   // 현재 타입에 맞는 카테고리 필터링
-  const filteredCategories = categories.filter((c) => c.type === formData.type)
-  const fixedCategories = filteredCategories.filter((c) => c.expense_type === 'fixed')
-  const variableCategories = filteredCategories.filter((c) => c.expense_type === 'variable')
-  const incomeCategories = filteredCategories.filter((c) => c.type === 'income')
-
   const totalExpense = pendingList
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0)
@@ -439,46 +432,26 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
               />
             </Stack>
 
-            {/* 두 번째 줄: 통화, 카테고리, 금액, 내용, 추가 버튼 */}
+            {/* 두 번째 줄: 카테고리, 금액, 내용, 추가 버튼 */}
             <Stack direction="row" spacing={2} onKeyDown={handleKeyDown}>
               {/* 카테고리 */}
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>카테고리</InputLabel>
-                <Select
-                  value={formData.category_id}
-                  label="카테고리"
-                  onChange={(e) => handleChange('category_id', e.target.value)}
-                >
-                  {formData.type === 'expense' && fixedCategories.length > 0 && (
-                    <MenuItem disabled sx={{ opacity: 0.7, fontSize: '0.75rem' }}>
-                      — 고정비 —
-                    </MenuItem>
-                  )}
-                  {formData.type === 'expense' &&
-                    fixedCategories.map((cat) => (
-                      <MenuItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </MenuItem>
-                    ))}
-                  {formData.type === 'expense' && variableCategories.length > 0 && (
-                    <MenuItem disabled sx={{ opacity: 0.7, fontSize: '0.75rem' }}>
-                      — 변동비 —
-                    </MenuItem>
-                  )}
-                  {formData.type === 'expense' &&
-                    variableCategories.map((cat) => (
-                      <MenuItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </MenuItem>
-                    ))}
-                  {formData.type === 'income' &&
-                    incomeCategories.map((cat) => (
-                      <MenuItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
+              <Chip
+                label={(() => {
+                  const selected = categories.find(c => c.id === formData.category_id)
+                  return selected ? selected.name : '카테고리'
+                })()}
+                variant={formData.category_id ? 'filled' : 'outlined'}
+                color={formData.category_id ? 'primary' : 'default'}
+                onClick={(e) => setCategoryAnchorEl(e.currentTarget)}
+                sx={{ cursor: 'pointer', height: 40, fontSize: '0.875rem', px: 1 }}
+              />
+              <CategoryPicker
+                anchorEl={categoryAnchorEl}
+                onClose={() => setCategoryAnchorEl(null)}
+                transactionType={formData.type}
+                selectedCategoryId={formData.category_id}
+                onSelect={(id) => handleChange('category_id', id)}
+              />
 
               {/* 금액 */}
               <AmountInput

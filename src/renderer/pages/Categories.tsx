@@ -135,7 +135,7 @@ export default function Categories() {
         LEFT JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
         WHERE c.is_active = 1
         GROUP BY c.id
-        ORDER BY c.type, c.expense_type, c.sort_order
+        ORDER BY c.type, c.expense_type, c.name
       `)
       setCategories(result as Category[])
     } catch (error) {

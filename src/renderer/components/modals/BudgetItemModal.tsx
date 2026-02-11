@@ -6,22 +6,16 @@ import {
   DialogActions,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Stack,
   IconButton,
   Chip,
   Box,
   Typography,
-  Checkbox,
-  ListItemText,
-  OutlinedInput,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
+import CategoryPicker from '../shared/CategoryPicker'
 
 interface BudgetItem {
   id: string
@@ -58,12 +52,15 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     category_ids: [] as string[],
   })
   const [saving, setSaving] = useState(false)
+  const [categoryPickerAnchor, setCategoryPickerAnchor] = useState<HTMLElement | null>(null)
+  const [usedCategoryMap, setUsedCategoryMap] = useState<Record<string, string>>({})
 
   const isEditMode = !!editItem
 
   useEffect(() => {
     if (open) {
       loadCategories()
+      loadUsedCategories()
       if (editItem) {
         loadEditItemData()
       }
@@ -93,10 +90,30 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     }
   }
 
+  const loadUsedCategories = async () => {
+    try {
+      const excludeId = editItem?.id || ''
+      const result = await window.electronAPI.db.query(
+        `SELECT bic.category_id, bi.name as budget_name
+         FROM budget_item_categories bic
+         JOIN budget_items bi ON bi.id = bic.budget_item_id
+         WHERE bi.is_active = 1 AND bi.id != ?`,
+        [excludeId]
+      ) as { category_id: string; budget_name: string }[]
+      const map: Record<string, string> = {}
+      for (const row of result) {
+        map[row.category_id] = row.budget_name
+      }
+      setUsedCategoryMap(map)
+    } catch (error) {
+      console.error('Failed to load used categories:', error)
+    }
+  }
+
   const loadCategories = async () => {
     try {
       const result = await window.electronAPI.db.query(
-        "SELECT * FROM categories WHERE is_active = 1 AND type = 'expense' ORDER BY expense_type, sort_order"
+        "SELECT * FROM categories WHERE is_active = 1 AND type = 'expense' ORDER BY expense_type, name"
       )
       setCategories(result as Category[])
     } catch (error) {
@@ -212,11 +229,6 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     onClose()
   }
 
-  const groupedCategories = {
-    fixed: categories.filter((c) => c.expense_type === 'fixed'),
-    variable: categories.filter((c) => c.expense_type === 'variable'),
-  }
-
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -245,50 +257,48 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             sx={{ width: '100%' }}
           />
 
-          <FormControl fullWidth>
-            <InputLabel>연결 카테고리</InputLabel>
-            <Select
-              multiple
-              value={formData.category_ids}
-              onChange={(e) => handleChange('category_ids', e.target.value as string[])}
-              input={<OutlinedInput label="연결 카테고리" />}
-              renderValue={(selected) => (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {selected.map((value) => {
-                    const cat = categories.find((c) => c.id === value)
-                    return <Chip key={value} label={cat?.name || value} size="small" />
-                  })}
-                </Box>
-              )}
-            >
-              {groupedCategories.fixed.length > 0 && (
-                <MenuItem disabled>
-                  <Typography variant="caption" color="textSecondary">
-                    — 고정비 —
-                  </Typography>
-                </MenuItem>
-              )}
-              {groupedCategories.fixed.map((cat) => (
-                <MenuItem key={cat.id} value={cat.id}>
-                  <Checkbox checked={formData.category_ids.includes(cat.id)} />
-                  <ListItemText primary={cat.name} />
-                </MenuItem>
-              ))}
-              {groupedCategories.variable.length > 0 && (
-                <MenuItem disabled>
-                  <Typography variant="caption" color="textSecondary">
-                    — 변동비 —
-                  </Typography>
-                </MenuItem>
-              )}
-              {groupedCategories.variable.map((cat) => (
-                <MenuItem key={cat.id} value={cat.id}>
-                  <Checkbox checked={formData.category_ids.includes(cat.id)} />
-                  <ListItemText primary={cat.name} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box>
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+              연결 카테고리
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {formData.category_ids.map((id) => {
+                const cat = categories.find((c) => c.id === id)
+                return cat ? (
+                  <Chip
+                    key={id}
+                    label={cat.name}
+                    size="small"
+                    color="primary"
+                    onDelete={() => {
+                      handleChange('category_ids', formData.category_ids.filter((cid) => cid !== id))
+                    }}
+                  />
+                ) : null
+              })}
+              <Chip
+                label={formData.category_ids.length === 0 ? '카테고리 선택' : '+'}
+                size="small"
+                variant="outlined"
+                onClick={(e) => setCategoryPickerAnchor(e.currentTarget)}
+                sx={{ cursor: 'pointer' }}
+              />
+            </Box>
+            <CategoryPicker
+              anchorEl={categoryPickerAnchor}
+              onClose={() => setCategoryPickerAnchor(null)}
+              transactionType="expense"
+              multiSelect
+              selectedCategoryIds={formData.category_ids}
+              disabledCategoryMap={usedCategoryMap}
+              onSelect={(categoryId) => {
+                const ids = formData.category_ids.includes(categoryId)
+                  ? formData.category_ids.filter((id) => id !== categoryId)
+                  : [...formData.category_ids, categoryId]
+                handleChange('category_ids', ids)
+              }}
+            />
+          </Box>
 
           <TextField
             label="메모"

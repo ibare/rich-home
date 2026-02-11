@@ -12,18 +12,17 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Select,
-  MenuItem,
-  FormControl,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
 } from '@mui/material'
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
-import { IconTrash, IconPlus, IconCalendarPlus, IconEdit } from '@tabler/icons-react'
+import { IconTrash, IconCalendarPlus, IconEdit } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import TransactionModal from '../components/modals/TransactionModal'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
 import AmountText from '../components/shared/AmountText'
+import CategoryPicker from '../components/shared/CategoryPicker'
 import MonthNavigation from '../components/shared/MonthNavigation'
 
 interface Transaction {
@@ -48,25 +47,17 @@ interface BudgetSummary {
   budget_item_name: string
   budget_amount: number
   spent_amount: number
-}
-
-interface BudgetItem {
-  id: string
-  name: string
-  group_name: string | null
+  category_names: string
 }
 
 export default function Transactions() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgetSummaries, setBudgetSummaries] = useState<BudgetSummary[]>([])
-  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [budgetItemModalOpen, setBudgetItemModalOpen] = useState(false)
-  const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<string | null>(null)
   const [selectedBudgetCategoryIds, setSelectedBudgetCategoryIds] = useState<string[]>([])
@@ -75,6 +66,10 @@ export default function Transactions() {
     return (saved === 'AED' || saved === 'KRW') ? saved : 'KRW'
   })
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [budgetItemModalOpen, setBudgetItemModalOpen] = useState(false)
+  const [editingBudgetItem, setEditingBudgetItem] = useState<{ id: string; name: string; group_name: string | null; base_amount: number; currency: string; memo: string | null } | null>(null)
+  const [categoryPickerAnchor, setCategoryPickerAnchor] = useState<HTMLElement | null>(null)
+  const [categoryPickerTransaction, setCategoryPickerTransaction] = useState<Transaction | null>(null)
 
   // 필터 - localStorage에서 마지막 선택한 년월 불러오기
   const [selectedYear, setSelectedYear] = useState(() => {
@@ -118,7 +113,6 @@ export default function Transactions() {
   }, [selectedYear, selectedMonth, exchangeRate])
 
   useEffect(() => {
-    loadBudgetItems()
     loadExchangeRate()
   }, [])
 
@@ -134,18 +128,6 @@ export default function Transactions() {
       }
     } catch (error) {
       console.error('Failed to load exchange rate:', error)
-    }
-  }
-
-  // 예산 항목 목록 조회
-  const loadBudgetItems = async () => {
-    try {
-      const result = await window.electronAPI.db.query(
-        `SELECT id, name, group_name FROM budget_items WHERE is_active = 1 ORDER BY sort_order`
-      )
-      setBudgetItems(result as BudgetItem[])
-    } catch (error) {
-      console.error('Failed to load budget items:', error)
     }
   }
 
@@ -247,15 +229,19 @@ export default function Transactions() {
           CASE WHEN bi.currency = 'AED'
             THEN bi.base_amount * ?
             ELSE bi.base_amount
-          END as budget_amount
+          END as budget_amount,
+          COALESCE(GROUP_CONCAT(c.name, ', '), '') as category_names
         FROM budget_items bi
+        LEFT JOIN budget_item_categories bic ON bic.budget_item_id = bi.id
+        LEFT JOIN categories c ON c.id = bic.category_id
         WHERE bi.is_active = 1
+        GROUP BY bi.id
         ORDER BY bi.sort_order
       `
 
       const budgetResult = await window.electronAPI.db.query(budgetQuery, [
         exchangeRate,
-      ]) as { budget_item_id: string; budget_item_name: string; budget_amount: number }[]
+      ]) as { budget_item_id: string; budget_item_name: string; budget_amount: number; category_names: string }[]
 
       // 예산 항목별 지출 집계
       const spentQuery = `
@@ -291,6 +277,7 @@ export default function Transactions() {
         budget_item_name: b.budget_item_name,
         budget_amount: b.budget_amount,
         spent_amount: spentMap.get(b.budget_item_id) || 0,
+        category_names: b.category_names,
       }))
       setBudgetSummaries(result as BudgetSummary[])
     } catch (error) {
@@ -331,49 +318,38 @@ export default function Transactions() {
     .filter((t) => t.type === 'expense' && t.include_in_stats === 1)
     .reduce((sum, t) => sum + t.amount, 0)
 
+  const handleBudgetCardDoubleClick = async (budgetItemId: string) => {
+    try {
+      const result = await window.electronAPI.db.get(
+        'SELECT id, name, group_name, base_amount, currency, memo FROM budget_items WHERE id = ?',
+        [budgetItemId]
+      ) as { id: string; name: string; group_name: string | null; base_amount: number; currency: string; memo: string | null } | undefined
+      if (result) {
+        setEditingBudgetItem(result)
+        setBudgetItemModalOpen(true)
+      }
+    } catch (error) {
+      console.error('Failed to load budget item:', error)
+    }
+  }
+
+  const handleCategoryChange = async (transactionId: string, newCategoryId: string) => {
+    try {
+      await window.electronAPI.db.query(
+        `UPDATE transactions SET category_id = ?, updated_at = datetime('now') WHERE id = ?`,
+        [newCategoryId, transactionId]
+      )
+      loadTransactions()
+      loadBudgetSummaries()
+    } catch (error) {
+      console.error('Failed to update transaction category:', error)
+    }
+  }
+
   const handleSaved = () => {
     loadTransactions()
     loadMonthsWithData()
     loadBudgetSummaries()
-  }
-
-  // 예산 항목 변경 처리
-  const handleBudgetItemChange = async (categoryId: string, budgetItemId: string | null) => {
-    try {
-      // 기존 매핑 삭제
-      await window.electronAPI.db.query(
-        `DELETE FROM budget_item_categories WHERE category_id = ?`,
-        [categoryId]
-      )
-
-      // 새로운 매핑 추가 (선택한 경우)
-      if (budgetItemId) {
-        const { v4: uuidv4 } = await import('uuid')
-        await window.electronAPI.db.query(
-          `INSERT INTO budget_item_categories (id, budget_item_id, category_id) VALUES (?, ?, ?)`,
-          [uuidv4(), budgetItemId, categoryId]
-        )
-      }
-
-      // 데이터 새로고침
-      loadTransactions()
-      loadBudgetSummaries()
-    } catch (error) {
-      console.error('Failed to change budget item:', error)
-      alert('예산 항목 변경에 실패했습니다.')
-    }
-  }
-
-  // 예산 항목 생성 후 콜백
-  const handleBudgetItemCreated = () => {
-    loadBudgetItems()
-    if (pendingCategoryId) {
-      // 새로 생성된 예산 항목을 자동으로 선택하려면 추가 로직 필요
-      // 일단은 목록만 새로고침
-      loadTransactions()
-      loadBudgetSummaries()
-    }
-    setPendingCategoryId(null)
   }
 
   // 자동 거래 생성 (auto_transaction_rules 테이블 기반)
@@ -566,57 +542,27 @@ export default function Transactions() {
       field: 'category_name',
       headerName: '카테고리',
       width: 130,
+      renderCell: (params: GridRenderCellParams<Transaction>) => (
+        <Typography
+          variant="body2"
+          onDoubleClick={(e) => {
+            setCategoryPickerTransaction(params.row)
+            setCategoryPickerAnchor(e.currentTarget)
+          }}
+          sx={{ cursor: 'default', '&:hover': { color: 'primary.main' }, userSelect: 'none' }}
+        >
+          {params.value}
+        </Typography>
+      ),
     },
     {
       field: 'budget_item_name',
       headerName: '예산',
-      width: 160,
+      width: 120,
       renderCell: (params: GridRenderCellParams<Transaction>) => (
-        <FormControl size="small" fullWidth>
-          <Select
-            value={params.row.budget_item_id || ''}
-            onChange={(e) => {
-              const value = e.target.value
-              if (value === '__create__') {
-                setPendingCategoryId(params.row.category_id)
-                setBudgetItemModalOpen(true)
-              } else {
-                handleBudgetItemChange(params.row.category_id, value || null)
-              }
-            }}
-            displayEmpty
-            sx={{
-              fontSize: '0.875rem',
-              '& .MuiSelect-select': { py: 0.5 },
-              '& .MuiOutlinedInput-notchedOutline': {
-                border: 'none',
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                border: '1px solid',
-                borderColor: 'divider',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                border: '1px solid',
-                borderColor: 'primary.main',
-              },
-            }}
-          >
-            <MenuItem value="">
-              <Typography variant="body2" color="text.disabled">미지정</Typography>
-            </MenuItem>
-            {budgetItems.map((item) => (
-              <MenuItem key={item.id} value={item.id}>
-                {item.name}
-              </MenuItem>
-            ))}
-            <MenuItem value="__create__" sx={{ borderTop: 1, borderColor: 'divider', mt: 1 }}>
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <IconPlus size={16} />
-                <Typography variant="body2">새 예산 항목 추가</Typography>
-              </Stack>
-            </MenuItem>
-          </Select>
-        </FormControl>
+        <Typography variant="body2" color={params.value ? 'text.primary' : 'text.disabled'}>
+          {params.value || '미지정'}
+        </Typography>
       ),
     },
     {
@@ -785,10 +731,17 @@ export default function Transactions() {
                 ? Math.min((overAmount / budget.budget_amount) * 100, 50)
                 : 0
               const isSelected = selectedBudgetItem === budget.budget_item_id
+              const hasNoCategories = !budget.category_names
               return (
-                <Card
+                <Tooltip
                   key={budget.budget_item_id}
+                  title={budget.category_names || '연결된 카테고리 없음'}
+                  placement="top"
+                  arrow
+                >
+                <Card
                   onClick={() => toggleBudgetItemSelection(budget.budget_item_id)}
+                  onDoubleClick={(e) => { e.stopPropagation(); handleBudgetCardDoubleClick(budget.budget_item_id) }}
                   sx={{
                     cursor: 'pointer',
                     transition: 'all 0.2s',
@@ -796,6 +749,9 @@ export default function Transactions() {
                     borderColor: isSelected ? 'primary.main' : 'transparent',
                     bgcolor: isSelected ? 'primary.50' : 'background.paper',
                     opacity: selectedBudgetItem && !isSelected ? 0.4 : 1,
+                    ...(hasNoCategories && {
+                      backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(0,0,0,0.03) 5px, rgba(0,0,0,0.03) 10px)',
+                    }),
                     '&:hover': {
                       borderColor: isSelected ? 'primary.main' : 'grey.300',
                     },
@@ -842,6 +798,7 @@ export default function Transactions() {
                     </Box>
                   </CardContent>
                 </Card>
+                </Tooltip>
               )
             })}
           </Box>
@@ -895,15 +852,6 @@ export default function Transactions() {
         editTransaction={editingTransaction}
       />
 
-      <BudgetItemModal
-        open={budgetItemModalOpen}
-        onClose={() => {
-          setBudgetItemModalOpen(false)
-          setPendingCategoryId(null)
-        }}
-        onSaved={handleBudgetItemCreated}
-      />
-
       {/* 삭제 확인 다이얼로그 */}
       <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
         <DialogTitle>거래 삭제</DialogTitle>
@@ -919,6 +867,25 @@ export default function Transactions() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CategoryPicker
+        anchorEl={categoryPickerAnchor}
+        onClose={() => { setCategoryPickerAnchor(null); setCategoryPickerTransaction(null) }}
+        transactionType={categoryPickerTransaction?.type || 'expense'}
+        selectedCategoryId={categoryPickerTransaction?.category_id || ''}
+        onSelect={(categoryId) => {
+          if (categoryPickerTransaction) {
+            handleCategoryChange(categoryPickerTransaction.id, categoryId)
+          }
+        }}
+      />
+
+      <BudgetItemModal
+        open={budgetItemModalOpen}
+        onClose={() => { setBudgetItemModalOpen(false); setEditingBudgetItem(null) }}
+        onSaved={() => { setBudgetItemModalOpen(false); setEditingBudgetItem(null); loadBudgetSummaries() }}
+        editItem={editingBudgetItem}
+      />
     </Box>
   )
 }

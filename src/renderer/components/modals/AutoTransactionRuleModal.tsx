@@ -12,12 +12,14 @@ import {
   MenuItem,
   Stack,
   IconButton,
+  Chip,
   Box,
   Typography,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
+import CategoryPicker from '../shared/CategoryPicker'
 
 interface AutoTransactionRule {
   id: string
@@ -71,6 +73,7 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
     memo: '',
   })
   const [saving, setSaving] = useState(false)
+  const [categoryPickerAnchor, setCategoryPickerAnchor] = useState<HTMLElement | null>(null)
 
   const isEditMode = !!editItem
 
@@ -99,7 +102,7 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
   const loadCategories = async () => {
     try {
       const result = await window.electronAPI.db.query(
-        "SELECT * FROM categories WHERE is_active = 1 AND type = 'expense' ORDER BY expense_type, sort_order"
+        "SELECT * FROM categories WHERE is_active = 1 AND type = 'expense' ORDER BY expense_type, name"
       )
       setCategories(result as Category[])
     } catch (error) {
@@ -237,11 +240,6 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
     onClose()
   }
 
-  const groupedCategories = {
-    fixed: categories.filter((c) => c.expense_type === 'fixed'),
-    variable: categories.filter((c) => c.expense_type === 'variable'),
-  }
-
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -307,42 +305,38 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
             )}
           </Box>
 
-          <FormControl fullWidth>
-            <InputLabel>카테고리 (선택)</InputLabel>
-            <Select
-              value={formData.category_id}
-              label="카테고리 (선택)"
-              onChange={(e) => handleChange('category_id', e.target.value)}
-            >
-              <MenuItem value="">
-                <em>선택 안함</em>
-              </MenuItem>
-              {groupedCategories.fixed.length > 0 && (
-                <MenuItem disabled>
-                  <Typography variant="caption" color="textSecondary">
-                    — 고정비 —
-                  </Typography>
-                </MenuItem>
-              )}
-              {groupedCategories.fixed.map((cat) => (
-                <MenuItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </MenuItem>
-              ))}
-              {groupedCategories.variable.length > 0 && (
-                <MenuItem disabled>
-                  <Typography variant="caption" color="textSecondary">
-                    — 변동비 —
-                  </Typography>
-                </MenuItem>
-              )}
-              {groupedCategories.variable.map((cat) => (
-                <MenuItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box>
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+              카테고리 (선택)
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {formData.category_id && (() => {
+                const cat = categories.find((c) => c.id === formData.category_id)
+                return cat ? (
+                  <Chip
+                    label={cat.name}
+                    size="small"
+                    color="primary"
+                    onDelete={() => handleChange('category_id', '')}
+                  />
+                ) : null
+              })()}
+              <Chip
+                label={formData.category_id ? '변경' : '카테고리 선택'}
+                size="small"
+                variant="outlined"
+                onClick={(e) => setCategoryPickerAnchor(e.currentTarget)}
+                sx={{ cursor: 'pointer' }}
+              />
+            </Box>
+            <CategoryPicker
+              anchorEl={categoryPickerAnchor}
+              onClose={() => setCategoryPickerAnchor(null)}
+              transactionType="expense"
+              selectedCategoryId={formData.category_id}
+              onSelect={(categoryId) => handleChange('category_id', categoryId)}
+            />
+          </Box>
 
           {/* 월 자동 생성: 연결 계좌 */}
           {formData.rule_type === 'fixed_monthly' && (
