@@ -27,8 +27,9 @@ interface AmountInputProps {
 // 숫자 포맷팅 함수
 // finalize: true면 최종 포맷팅 (blur 시), false면 입력 중 포맷팅
 const formatNumber = (value: string, currency: string, finalize = false): string => {
+  const isNegative = value.startsWith('-')
   const num = value.replace(/[^\d.]/g, '')
-  if (num === '') return ''
+  if (num === '') return isNegative ? '-' : ''
 
   // AED는 소수점 2자리 고정
   if (currency === 'AED') {
@@ -45,28 +46,30 @@ const formatNumber = (value: string, currency: string, finalize = false): string
     if (isNaN(parsedInt) && intPart !== '') return ''
     const formattedInt = intPart === '' ? '0' : parsedInt.toLocaleString()
 
+    const prefix = isNegative ? '-' : ''
+
     // 소수점이 있는 경우
     if (parts.length === 2) {
       const decPart = parts[1]
       // 소수점만 있고 숫자가 없는 경우
       if (decPart === '') {
         // 최종 포맷팅이면 소수점 제거, 입력 중이면 소수점 유지
-        return finalize ? formattedInt : formattedInt + '.'
+        return finalize ? prefix + formattedInt : prefix + formattedInt + '.'
       }
       // 소수점 이하 숫자가 있으면 2자리까지 허용
       const trimmedDec = decPart.slice(0, 2)
       // 최종 포맷팅이면 2자리로 패딩, 입력 중이면 그대로
       const finalDec = finalize ? trimmedDec.padEnd(2, '0') : trimmedDec
-      return formattedInt + '.' + finalDec
+      return prefix + formattedInt + '.' + finalDec
     }
 
-    return intPart === '' ? '' : formattedInt
+    return intPart === '' ? '' : prefix + formattedInt
   }
 
   // KRW는 정수만
   const parsed = parseInt(num.split('.')[0], 10)
   if (isNaN(parsed)) return ''
-  return parsed.toLocaleString()
+  return (isNegative ? '-' : '') + parsed.toLocaleString()
 }
 
 export default function AmountInput({
@@ -93,7 +96,7 @@ export default function AmountInput({
   // 금액 입력 처리
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/,/g, '')
-    if (raw === '' || raw === '.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && currency === 'AED')) {
+    if (raw === '' || raw === '-' || raw === '.' || raw === '-.' || !isNaN(parseFloat(raw)) || (raw.endsWith('.') && currency === 'AED')) {
       onChange(formatNumber(raw, currency, false), currency)
     }
   }
@@ -108,7 +111,7 @@ export default function AmountInput({
   // 더하기 계산기 열기
   const openCalculator = () => {
     const currentAmount = value.replace(/,/g, '')
-    if (currentAmount && !isNaN(parseFloat(currentAmount)) && parseFloat(currentAmount) > 0) {
+    if (currentAmount && !isNaN(parseFloat(currentAmount)) && parseFloat(currentAmount) !== 0) {
       setCalcLines(currentAmount)
     } else {
       setCalcLines('')
@@ -124,9 +127,7 @@ export default function AmountInput({
       .split('\n')
       .map((line) => parseFloat(line.replace(/,/g, '').trim()) || 0)
       .reduce((s, num) => s + num, 0)
-    if (sum >= 0) {
-      onChange(formatNumber(String(sum), currency), currency)
-    }
+    onChange(formatNumber(String(sum), currency), currency)
   }
 
   // 더하기 계산기 닫기

@@ -29,13 +29,15 @@ export default function AmountText({
 
   // 부호 결정
   let sign = ''
-  if (showSign) {
+  if (amount < 0) {
+    sign = '-'
+  } else if (showSign) {
     if (signType === 'income') {
       sign = '+'
     } else if (signType === 'expense') {
       sign = '-'
     } else if (signType === 'auto') {
-      sign = amount >= 0 ? '+' : '-'
+      sign = '+'
     }
   }
 
@@ -73,5 +75,6 @@ export function formatAmount(amount: number, currency: string): string {
     minimumFractionDigits: currency === 'AED' && !isWholeNumber ? 2 : 0,
     maximumFractionDigits: currency === 'AED' ? 2 : 0,
   })
-  return currency === 'KRW' ? `${formatted} 원` : `${formatted} AED`
+  const sign = amount < 0 ? '-' : ''
+  return currency === 'KRW' ? `${sign}${formatted} 원` : `${sign}${formatted} AED`
 }
