@@ -76,7 +76,7 @@ src/
 │   ├── preload.ts               # contextBridge (renderer↔main IPC)
 │   └── migrations/              # DB 스키마 마이그레이션
 │       ├── index.ts             # 마이그레이션 러너
-│       └── 001~009_*.ts         # 개별 마이그레이션
+│       └── 001~011_*.ts         # 개별 마이그레이션
 │
 ├── renderer/                    # React 프론트엔드 (Vite)
 │   ├── App.tsx                  # 라우팅 설정
@@ -86,6 +86,7 @@ src/
 │   │   ├── Dashboard.tsx        # 대시보드
 │   │   ├── Transactions.tsx     # 거래 내역
 │   │   ├── Budget.tsx           # 예산 관리
+│   │   ├── AutoTransactions.tsx # 자동 거래 생성 규칙
 │   │   ├── Statistics.tsx       # 통계
 │   │   ├── Accounts.tsx         # 계좌 관리
 │   │   ├── AccountBalanceHistory.tsx  # 잔고 히스토리
@@ -96,7 +97,7 @@ src/
 │   ├── components/
 │   │   ├── layout/              # Sidebar, Header
 │   │   ├── modals/              # Dialog 컴포넌트
-│   │   └── shared/              # AmountText, MonthNavigation 등
+│   │   └── shared/              # AmountText, MonthNavigation, CategoryPicker 등
 │   └── contexts/                # React Context (PageContext)
 │
 └── shared/                      # 공유 타입 정의
@@ -117,17 +118,23 @@ const totalKRW = items.reduce((sum, item) => {
 
 ### 예산 시스템
 
-3가지 예산 타입을 지원한다:
-
-| 타입 | 설명 |
-|------|------|
-| `fixed_monthly` | 고정 월예산 (매월 동일 금액) |
-| `variable_monthly` | 변동 월예산 (매월 동일 금액, 변동비 카테고리용) |
-| `distributed` | 분배 예산 (`base_amount`를 `valid_from`~`valid_to` 기간의 월수로 나누어 배분) |
+예산 항목에 카테고리를 연결하여 월별 지출을 추적한다.
 
 - `budget_item_categories` 테이블로 예산 항목과 카테고리를 M:N 매핑
 - `group_name`으로 예산 항목을 그룹화하여 합산 지출 추적
-- `account_id`로 계좌를 연결할 수 있으며, `auto_generate` 플래그가 활성화되면 고정 예산에 대해 자동으로 거래를 생성 (description 기반 중복 방지)
+- 거래내역 페이지에서 예산별 지출 카드로 실시간 현황 확인
+
+### 자동 거래 생성 규칙
+
+예산과 분리된 독립 테이블(`auto_transaction_rules`)로 자동 거래 생성을 관리한다.
+
+| 규칙 유형 | 설명 |
+|-----------|------|
+| `distributed` | 분배: `base_amount`를 `valid_from`~`valid_to` 기간의 월수로 나누어 매월 거래 생성 |
+| `fixed_monthly` | 월 자동 생성: 매월 동일 금액으로 거래 생성, 계좌 연결 시 잔고 자동 합산 |
+
+- 거래내역 페이지의 "자동 거래 생성" 버튼으로 실행 (description 기반 중복 방지)
+- 규칙별 상태 표시: 정상 / 기간만료 / 미완성(카테고리 미연결)
 
 ### 거래 내역
 
@@ -191,8 +198,9 @@ export const migration010: Migration = {
 | `account_balances` | 계좌 잔고 히스토리 스냅샷 |
 | `transactions` | 수입/지출 거래 내역 |
 | `categories` | 수입/지출 카테고리 (expense_type: fixed/variable) |
-| `budget_items` | 예산 항목 템플릿 |
+| `budget_items` | 예산 항목 (이름, 금액, 통화) |
 | `budget_item_categories` | 예산-카테고리 M:N 매핑 |
+| `auto_transaction_rules` | 자동 거래 생성 규칙 (분배/월 자동 생성) |
 | `assets` | 자산 (부동산, 주식) |
 | `liabilities` | 부채 (대출, 전세보증금 등) |
 | `settings` | 키-값 설정 (환율 등) |
