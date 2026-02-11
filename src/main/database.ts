@@ -98,10 +98,11 @@ export function initDatabase(customPath?: string): void {
 
   const database = new Database(dbPath) as BetterSqlite3.Database
   database.pragma('journal_mode = WAL')
-  database.pragma('foreign_keys = ON')
 
-  // 마이그레이션 실행
+  // 마이그레이션 중에는 foreign_keys를 끔 (DROP TABLE 시 ON DELETE CASCADE로 데이터 손실 방지)
+  database.pragma('foreign_keys = OFF')
   runMigrations(database)
+  database.pragma('foreign_keys = ON')
 
   db = database
 }

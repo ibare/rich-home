@@ -5,7 +5,6 @@ import {
   Stack,
   Card,
   CardContent,
-  Chip,
   IconButton,
   Table,
   TableBody,
@@ -32,25 +31,14 @@ interface BudgetItem {
   id: string
   name: string
   group_name: string | null
-  budget_type: string
   base_amount: number
   currency: string
   memo: string | null
-  valid_from: string | null
-  valid_to: string | null
   is_active: number
-  account_id: string | null
-  auto_generate: number
   category_names?: string
 }
 
-const budgetTypeLabels: Record<string, string> = {
-  fixed_monthly: '고정',
-  variable_monthly: '변동',
-  distributed: '분배',
-}
-
-type SortKey = 'name' | 'budget_type' | 'category_names' | 'base_amount' | 'monthly_amount'
+type SortKey = 'name' | 'category_names' | 'base_amount' | 'monthly_amount'
 type SortOrder = 'asc' | 'desc'
 
 export default function Budget() {
@@ -95,8 +83,8 @@ export default function Budget() {
     setLoading(true)
     try {
       const result = await window.electronAPI.db.query(`
-        SELECT bi.id, bi.name, bi.group_name, bi.budget_type, bi.base_amount, bi.currency,
-               bi.memo, bi.valid_from, bi.valid_to, bi.is_active, bi.account_id, bi.auto_generate,
+        SELECT bi.id, bi.name, bi.group_name, bi.base_amount, bi.currency,
+               bi.memo, bi.is_active,
                GROUP_CONCAT(c.name, ', ') as category_names
         FROM budget_items bi
         LEFT JOIN budget_item_categories bic ON bi.id = bic.budget_item_id
@@ -114,14 +102,6 @@ export default function Budget() {
   }
 
   const getMonthlyAmount = (item: BudgetItem) => {
-    if (item.budget_type === 'distributed' && item.valid_from && item.valid_to) {
-      const from = new Date(item.valid_from)
-      const to = new Date(item.valid_to)
-      const months = Math.max(1,
-        (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
-      )
-      return Math.round(item.base_amount / months)
-    }
     return item.base_amount
   }
 
@@ -179,9 +159,6 @@ export default function Budget() {
       switch (sortKey) {
         case 'name':
           comparison = a.name.localeCompare(b.name, 'ko')
-          break
-        case 'budget_type':
-          comparison = a.budget_type.localeCompare(b.budget_type)
           break
         case 'category_names':
           comparison = (a.category_names || '').localeCompare(b.category_names || '', 'ko')
@@ -256,15 +233,6 @@ export default function Budget() {
                   </TableCell>
                   <TableCell>
                     <TableSortLabel
-                      active={sortKey === 'budget_type'}
-                      direction={sortKey === 'budget_type' ? sortOrder : 'asc'}
-                      onClick={() => handleSort('budget_type')}
-                    >
-                      유형
-                    </TableSortLabel>
-                  </TableCell>
-                  <TableCell>
-                    <TableSortLabel
                       active={sortKey === 'category_names'}
                       direction={sortKey === 'category_names' ? sortOrder : 'asc'}
                       onClick={() => handleSort('category_names')}
@@ -303,13 +271,6 @@ export default function Budget() {
                             {item.memo}
                           </Typography>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={budgetTypeLabels[item.budget_type]}
-                          size="small"
-                          variant="outlined"
-                        />
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="textSecondary">

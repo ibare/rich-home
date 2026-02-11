@@ -12,6 +12,7 @@ import Assets from './pages/Assets'
 import Liabilities from './pages/Liabilities'
 import Categories from './pages/Categories'
 import Budget from './pages/Budget'
+import AutoTransactions from './pages/AutoTransactions'
 import Statistics from './pages/Statistics'
 import Settings from './pages/Settings'
 
@@ -94,6 +95,7 @@ function App() {
                   <Route path="/liabilities" element={<Liabilities />} />
                   <Route path="/categories" element={<Categories />} />
                   <Route path="/budget" element={<Budget />} />
+                  <Route path="/auto-transactions" element={<AutoTransactions />} />
                   <Route path="/statistics" element={<Statistics />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>

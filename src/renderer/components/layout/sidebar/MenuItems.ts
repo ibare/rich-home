@@ -6,6 +6,7 @@ import {
   IconCreditCard,
   IconCategory,
   IconPigMoney,
+  IconRepeat,
   IconChartBar,
   IconSettings,
 } from '@tabler/icons-react'
@@ -71,6 +72,12 @@ const MenuItems: MenuItem[] = [
     title: 'Budget',
     icon: IconPigMoney,
     href: '/budget',
+  },
+  {
+    id: 'auto-transactions',
+    title: 'Auto Rules',
+    icon: IconRepeat,
+    href: '/auto-transactions',
   },
   {
     navlabel: true,

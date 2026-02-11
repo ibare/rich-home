@@ -108,7 +108,7 @@ export default function Dashboard() {
           ? `${year + 1}-01-01`
           : `${year}-${String(month + 1).padStart(2, '0')}-01`
 
-      // 환율 조회
+      // TODO: 환율 키를 'aed_to_krw_rate'로 통일 필요 (Settings.tsx 기준)
       const exchangeRateSetting = (await window.electronAPI.db.query(
         "SELECT value FROM settings WHERE key = 'exchange_rate_aed_krw'"
       )) as { value: string }[]
@@ -185,26 +185,12 @@ export default function Dashboard() {
         }
       }
 
-      // 이번 달 예산 (budget_items에서 직접 계산)
-      // distributed 예산은 기간 기반 월 분배액 계산, 유효 기간 내인 것만 포함
+      // 이번 달 예산
       const budgetItemsResult = (await window.electronAPI.db.query(`
-        SELECT
-          CASE
-            WHEN budget_type = 'distributed' AND valid_from IS NOT NULL AND valid_to IS NOT NULL THEN
-              ROUND(base_amount / MAX(1, (
-                (CAST(strftime('%Y', valid_to) AS INTEGER) - CAST(strftime('%Y', valid_from) AS INTEGER)) * 12 +
-                (CAST(strftime('%m', valid_to) AS INTEGER) - CAST(strftime('%m', valid_from) AS INTEGER)) + 1
-              )))
-            ELSE base_amount
-          END as monthly_amount,
-          currency
+        SELECT base_amount as monthly_amount, currency
         FROM budget_items
         WHERE is_active = 1
-          AND (
-            budget_type != 'distributed'
-            OR (valid_from < ? AND valid_to >= ?)
-          )
-      `, [endDate, startDate])) as { monthly_amount: number; currency: string }[]
+      `)) as { monthly_amount: number; currency: string }[]
 
       let monthlyBudget = 0
       for (const budget of budgetItemsResult) {
@@ -251,29 +237,11 @@ export default function Dashboard() {
         const budgetResult = (await window.electronAPI.db.query(`
           SELECT
             SUM(
-              CASE
-                WHEN budget_type = 'distributed' AND valid_from IS NOT NULL AND valid_to IS NOT NULL THEN
-                  CASE WHEN currency = 'AED'
-                    THEN ROUND(base_amount / MAX(1, (
-                      (CAST(strftime('%Y', valid_to) AS INTEGER) - CAST(strftime('%Y', valid_from) AS INTEGER)) * 12 +
-                      (CAST(strftime('%m', valid_to) AS INTEGER) - CAST(strftime('%m', valid_from) AS INTEGER)) + 1
-                    ))) * ?
-                    ELSE ROUND(base_amount / MAX(1, (
-                      (CAST(strftime('%Y', valid_to) AS INTEGER) - CAST(strftime('%Y', valid_from) AS INTEGER)) * 12 +
-                      (CAST(strftime('%m', valid_to) AS INTEGER) - CAST(strftime('%m', valid_from) AS INTEGER)) + 1
-                    )))
-                  END
-                ELSE
-                  CASE WHEN currency = 'AED' THEN base_amount * ? ELSE base_amount END
-              END
+              CASE WHEN currency = 'AED' THEN base_amount * ? ELSE base_amount END
             ) as total_budget
           FROM budget_items
           WHERE is_active = 1
-            AND (
-              budget_type != 'distributed'
-              OR (valid_from < ? AND valid_to >= ?)
-            )
-        `, [exchangeRate, exchangeRate, targetEndDate, targetStartDate])) as { total_budget: number | null }[]
+        `, [exchangeRate])) as { total_budget: number | null }[]
 
         // 해당 월 지출
         const expenseResult = (await window.electronAPI.db.query(`

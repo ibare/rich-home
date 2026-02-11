@@ -46,10 +46,8 @@ interface Transaction {
 interface BudgetSummary {
   budget_item_id: string
   budget_item_name: string
-  budget_type: string
   budget_amount: number
   spent_amount: number
-  auto_generate: number
 }
 
 interface BudgetItem {
@@ -127,6 +125,7 @@ export default function Transactions() {
   // 환율 조회
   const loadExchangeRate = async () => {
     try {
+      // TODO: 환율 키를 'aed_to_krw_rate'로 통일 필요 (Settings.tsx 기준)
       const result = (await window.electronAPI.db.query(
         `SELECT value FROM settings WHERE key = 'exchange_rate'`
       )) as { value: string }[]
@@ -241,46 +240,22 @@ export default function Transactions() {
 
       // 예산 항목별로 집계
       // 환율을 적용하여 모든 금액을 KRW로 환산
-      // distributed 예산은 기간 기반 월 분배액 계산
       const budgetQuery = `
         SELECT
           bi.id as budget_item_id,
           bi.name as budget_item_name,
-          bi.budget_type,
-          bi.auto_generate,
-          CASE
-            WHEN bi.budget_type = 'distributed' AND bi.valid_from IS NOT NULL AND bi.valid_to IS NOT NULL THEN
-              CASE WHEN bi.currency = 'AED'
-                THEN ROUND(bi.base_amount / MAX(1, (
-                  (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
-                  (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
-                ))) * ?
-                ELSE ROUND(bi.base_amount / MAX(1, (
-                  (CAST(strftime('%Y', bi.valid_to) AS INTEGER) - CAST(strftime('%Y', bi.valid_from) AS INTEGER)) * 12 +
-                  (CAST(strftime('%m', bi.valid_to) AS INTEGER) - CAST(strftime('%m', bi.valid_from) AS INTEGER)) + 1
-                )))
-              END
-            ELSE
-              CASE WHEN bi.currency = 'AED'
-                THEN bi.base_amount * ?
-                ELSE bi.base_amount
-              END
+          CASE WHEN bi.currency = 'AED'
+            THEN bi.base_amount * ?
+            ELSE bi.base_amount
           END as budget_amount
         FROM budget_items bi
         WHERE bi.is_active = 1
-          AND (
-            bi.budget_type != 'distributed'
-            OR (bi.valid_from < ? AND bi.valid_to >= ?)
-          )
         ORDER BY bi.sort_order
       `
 
       const budgetResult = await window.electronAPI.db.query(budgetQuery, [
         exchangeRate,
-        exchangeRate,
-        endDate,
-        startDate,
-      ]) as { budget_item_id: string; budget_item_name: string; budget_type: string; auto_generate: number; budget_amount: number }[]
+      ]) as { budget_item_id: string; budget_item_name: string; budget_amount: number }[]
 
       // 예산 항목별 지출 집계
       const spentQuery = `
@@ -300,10 +275,6 @@ export default function Transactions() {
           AND t.type = 'expense'
           AND t.include_in_stats = 1
         WHERE bi.is_active = 1
-          AND (
-            bi.budget_type != 'distributed'
-            OR (bi.valid_from < ? AND bi.valid_to >= ?)
-          )
         GROUP BY bi.id
       `
 
@@ -311,8 +282,6 @@ export default function Transactions() {
         exchangeRate,
         startDate,
         endDate,
-        endDate,
-        startDate,
       ]) as { budget_item_id: string; spent_amount: number }[]
 
       // 결과 병합
@@ -320,10 +289,8 @@ export default function Transactions() {
       const result = budgetResult.map(b => ({
         budget_item_id: b.budget_item_id,
         budget_item_name: b.budget_item_name,
-        budget_type: b.budget_type,
         budget_amount: b.budget_amount,
         spent_amount: spentMap.get(b.budget_item_id) || 0,
-        auto_generate: b.auto_generate,
       }))
       setBudgetSummaries(result as BudgetSummary[])
     } catch (error) {
@@ -409,43 +376,27 @@ export default function Transactions() {
     setPendingCategoryId(null)
   }
 
-  // 분배 예산 거래 자동 생성
+  // 자동 거래 생성 (auto_transaction_rules 테이블 기반)
   const generateDistributedTransactions = async () => {
     try {
-      // 선택된 월의 첫째 날 (유효 기간 비교용)
       const targetMonthStart = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
       const targetMonthEnd = selectedMonth === 12
         ? `${selectedYear + 1}-01-01`
         : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
 
-      // 예산 항목 조회 (자동생성 고정 월예산 + 분배 예산)
-      const budgets = (await window.electronAPI.db.query(`
-        SELECT
-          bi.id,
-          bi.name,
-          bi.budget_type,
-          bi.base_amount,
-          bi.currency,
-          bi.valid_from,
-          bi.valid_to,
-          bi.account_id,
-          (SELECT bic.category_id FROM budget_item_categories bic WHERE bic.budget_item_id = bi.id LIMIT 1) as category_id
-        FROM budget_items bi
-        WHERE bi.is_active = 1
-          AND (
-            (bi.budget_type = 'fixed_monthly' AND bi.auto_generate = 1)
-            OR (
-              bi.budget_type = 'distributed'
-              AND bi.valid_from IS NOT NULL
-              AND bi.valid_to IS NOT NULL
-              AND bi.valid_from < ?
-              AND bi.valid_to >= ?
-            )
-          )
+      // 자동 거래 규칙 조회
+      const rules = (await window.electronAPI.db.query(`
+        SELECT atr.id, atr.name, atr.rule_type, atr.base_amount, atr.currency,
+               atr.valid_from, atr.valid_to, atr.account_id, atr.category_id
+        FROM auto_transaction_rules atr
+        WHERE atr.is_active = 1 AND (
+          atr.rule_type = 'fixed_monthly'
+          OR (atr.rule_type = 'distributed' AND atr.valid_from < ? AND atr.valid_to >= ?)
+        )
       `, [targetMonthEnd, targetMonthStart])) as {
         id: string
         name: string
-        budget_type: string
+        rule_type: string
         base_amount: number
         currency: string
         valid_from: string | null
@@ -454,16 +405,14 @@ export default function Transactions() {
         category_id: string | null
       }[]
 
-      if (budgets.length === 0) {
-        alert('생성할 예산 항목이 없습니다.')
+      if (rules.length === 0) {
+        alert('생성할 자동 거래 규칙이 없습니다.')
         return
       }
 
-      // 거래 생성
       const { v4: uuidv4 } = await import('uuid')
       let createdCount = 0
 
-      // 월 수 계산 함수
       const calcMonths = (from: string, to: string) => {
         const fromDate = new Date(from)
         const toDate = new Date(to)
@@ -471,25 +420,24 @@ export default function Transactions() {
         return Math.max(1, months)
       }
 
-      for (const budget of budgets) {
-        if (!budget.category_id) {
-          console.warn(`예산 항목 "${budget.name}"에 연결된 카테고리가 없습니다.`)
+      for (const rule of rules) {
+        if (!rule.category_id) {
+          console.warn(`자동 거래 규칙 "${rule.name}"에 연결된 카테고리가 없습니다.`)
           continue
         }
 
         let description: string
         let monthlyAmount: number
 
-        if (budget.budget_type === 'distributed') {
-          const months = calcMonths(budget.valid_from!, budget.valid_to!)
-          description = `[분배] ${budget.name} (${months}개월)`
-          monthlyAmount = Math.round(budget.base_amount / months)
+        if (rule.rule_type === 'distributed') {
+          const months = calcMonths(rule.valid_from!, rule.valid_to!)
+          description = `[분배] ${rule.name} (${months}개월)`
+          monthlyAmount = Math.round(rule.base_amount / months)
         } else {
-          // fixed_monthly
-          description = budget.account_id
-            ? `[고정] ${budget.name} 🐷`
-            : `[고정] ${budget.name}`
-          monthlyAmount = budget.base_amount
+          description = rule.account_id
+            ? `[고정] ${rule.name} 🐷`
+            : `[고정] ${rule.name}`
+          monthlyAmount = rule.base_amount
         }
 
         // 동일한 내용의 거래가 이미 있는지 확인
@@ -509,35 +457,33 @@ export default function Transactions() {
         `, [
           uuidv4(),
           monthlyAmount,
-          budget.currency,
-          budget.category_id,
+          rule.currency,
+          rule.category_id,
           targetMonthStart,
           description
         ])
 
-        // 고정 예산에 계좌가 연결되어 있으면 해당 계좌 잔고에 금액 합산
-        if (budget.budget_type === 'fixed_monthly' && budget.account_id) {
-          // 해당 계좌의 가장 최근 잔고 조회
+        // 고정 규칙에 계좌가 연결되어 있으면 해당 계좌 잔고에 금액 합산
+        if (rule.rule_type === 'fixed_monthly' && rule.account_id) {
           const latestBalance = (await window.electronAPI.db.get(`
             SELECT balance FROM account_balances
             WHERE account_id = ?
             ORDER BY recorded_at DESC, created_at DESC
             LIMIT 1
-          `, [budget.account_id])) as { balance: number } | undefined
+          `, [rule.account_id])) as { balance: number } | undefined
 
           const currentBalance = latestBalance?.balance || 0
           const newBalance = currentBalance + monthlyAmount
 
-          // 새 잔고 추가
           await window.electronAPI.db.query(`
             INSERT INTO account_balances (id, account_id, balance, recorded_at, memo)
             VALUES (?, ?, ?, ?, ?)
           `, [
             uuidv4(),
-            budget.account_id,
+            rule.account_id,
             newBalance,
             targetMonthStart,
-            `[자동] ${budget.name} 예산 적립`
+            `[자동] ${rule.name} 예산 적립`
           ])
         }
 
@@ -550,8 +496,8 @@ export default function Transactions() {
       loadMonthsWithData()
       loadBudgetSummaries()
     } catch (error) {
-      console.error('Failed to generate distributed transactions:', error)
-      alert('분배 거래 생성에 실패했습니다.')
+      console.error('Failed to generate auto transactions:', error)
+      alert('자동 거래 생성에 실패했습니다.')
     }
   }
 

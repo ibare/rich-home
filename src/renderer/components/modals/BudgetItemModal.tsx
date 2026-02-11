@@ -7,7 +7,6 @@ import {
   Button,
   TextField,
   FormControl,
-  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
@@ -28,22 +27,10 @@ interface BudgetItem {
   id: string
   name: string
   group_name: string | null
-  budget_type: string
   base_amount: number
   currency: string
   memo: string | null
-  valid_from: string | null
-  valid_to: string | null
   category_ids?: string[]
-  account_id?: string | null
-  auto_generate?: number
-}
-
-interface Account {
-  id: string
-  name: string
-  owner: string
-  currency: string
 }
 
 interface BudgetItemModalProps {
@@ -60,27 +47,15 @@ interface Category {
   expense_type: string | null
 }
 
-const budgetTypeOptions = [
-  { value: 'fixed_monthly', label: '고정 월예산', description: '매월 동일한 금액' },
-  { value: 'variable_monthly', label: '변동 월예산', description: '매월 한도 조정 가능' },
-  { value: 'distributed', label: '분배 예산', description: '기간 내 총액을 월별로 분배' },
-]
-
 export default function BudgetItemModal({ open, onClose, onSaved, editItem }: BudgetItemModalProps) {
   const [categories, setCategories] = useState<Category[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
   const [formData, setFormData] = useState({
     name: '',
     group_name: '',
-    budget_type: 'fixed_monthly',
     base_amount: '',
     currency: 'KRW',
     memo: '',
-    valid_from: '',
-    valid_to: '',
     category_ids: [] as string[],
-    account_id: '',
-    auto_generate: false,
   })
   const [saving, setSaving] = useState(false)
 
@@ -89,9 +64,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
   useEffect(() => {
     if (open) {
       loadCategories()
-      loadAccounts()
       if (editItem) {
-        // 수정 모드: 기존 데이터 로드
         loadEditItemData()
       }
     }
@@ -110,15 +83,10 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       setFormData({
         name: editItem.name,
         group_name: editItem.group_name || '',
-        budget_type: editItem.budget_type,
         base_amount: editItem.base_amount.toLocaleString(),
         currency: editItem.currency,
         memo: editItem.memo || '',
-        valid_from: editItem.valid_from || '',
-        valid_to: editItem.valid_to || '',
         category_ids: categoryResult.map((r) => r.category_id),
-        account_id: editItem.account_id || '',
-        auto_generate: editItem.auto_generate === 1,
       })
     } catch (error) {
       console.error('Failed to load edit item data:', error)
@@ -136,17 +104,6 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     }
   }
 
-  const loadAccounts = async () => {
-    try {
-      const result = await window.electronAPI.db.query(
-        'SELECT id, name, owner, currency FROM accounts WHERE is_active = 1 ORDER BY owner, name'
-      )
-      setAccounts(result as Account[])
-    } catch (error) {
-      console.error('Failed to load accounts:', error)
-    }
-  }
-
   const handleChange = (field: string, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
@@ -154,31 +111,6 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
   // AmountInput에서 금액과 통화 변경 처리
   const handleAmountChange = (amount: string, currency: string) => {
     setFormData((prev) => ({ ...prev, base_amount: amount, currency }))
-  }
-
-  const getAmountLabel = () => {
-    if (formData.budget_type === 'distributed') {
-      return '총 금액'
-    }
-    return '월 예산 금액'
-  }
-
-  // 분배 예산의 월 수 계산
-  const getDistributedMonths = () => {
-    if (!formData.valid_from || !formData.valid_to) return 0
-    const from = new Date(formData.valid_from)
-    const to = new Date(formData.valid_to)
-    const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
-    return Math.max(1, months)
-  }
-
-  const getMonthlyAmount = () => {
-    const amount = parseFloat(formData.base_amount.replace(/,/g, '')) || 0
-    if (formData.budget_type === 'distributed') {
-      const months = getDistributedMonths()
-      return months > 0 ? Math.round(amount / months) : 0
-    }
-    return amount
   }
 
   const handleSubmit = async () => {
@@ -198,40 +130,18 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       return
     }
 
-    // 분배 예산은 기간 필수
-    if (formData.budget_type === 'distributed') {
-      if (!formData.valid_from || !formData.valid_to) {
-        alert('분배 예산은 시작일과 종료일을 입력해주세요.')
-        return
-      }
-      if (formData.valid_from > formData.valid_to) {
-        alert('종료일은 시작일보다 이후여야 합니다.')
-        return
-      }
-    }
-
     setSaving(true)
     try {
-      // 고정 예산이 아닌 경우 account_id는 null, auto_generate는 0
-      const accountId = formData.budget_type === 'fixed_monthly' ? (formData.account_id || null) : null
-      const autoGenerate = formData.budget_type === 'fixed_monthly' ? (formData.auto_generate ? 1 : 0) : 0
-
       if (isEditMode && editItem) {
-        // 수정 모드
         await window.electronAPI.db.query(
-          `UPDATE budget_items SET name = ?, group_name = ?, budget_type = ?, base_amount = ?, currency = ?, memo = ?, valid_from = ?, valid_to = ?, account_id = ?, auto_generate = ?, updated_at = datetime('now')
+          `UPDATE budget_items SET name = ?, group_name = ?, base_amount = ?, currency = ?, memo = ?, updated_at = datetime('now')
            WHERE id = ?`,
           [
             formData.name,
             formData.group_name || null,
-            formData.budget_type,
             amount,
             formData.currency,
             formData.memo || null,
-            formData.valid_from || null,
-            formData.valid_to || null,
-            accountId,
-            autoGenerate,
             editItem.id,
           ]
         )
@@ -254,20 +164,15 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
         const budgetItemId = uuidv4()
 
         await window.electronAPI.db.query(
-          `INSERT INTO budget_items (id, name, group_name, budget_type, base_amount, currency, memo, valid_from, valid_to, account_id, auto_generate)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO budget_items (id, name, group_name, base_amount, currency, memo)
+           VALUES (?, ?, ?, ?, ?, ?)`,
           [
             budgetItemId,
             formData.name,
             formData.group_name || null,
-            formData.budget_type,
             amount,
             formData.currency,
             formData.memo || null,
-            formData.valid_from || null,
-            formData.valid_to || null,
-            accountId,
-            autoGenerate,
           ]
         )
 
@@ -295,15 +200,10 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     setFormData({
       name: '',
       group_name: '',
-      budget_type: 'fixed_monthly',
       base_amount: '',
       currency: 'KRW',
       memo: '',
-      valid_from: '',
-      valid_to: '',
       category_ids: [],
-      account_id: '',
-      auto_generate: false,
     })
   }
 
@@ -337,106 +237,13 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
             required
           />
 
-          <FormControl fullWidth>
-            <InputLabel>예산 유형</InputLabel>
-            <Select
-              value={formData.budget_type}
-              label="예산 유형"
-              onChange={(e) => handleChange('budget_type', e.target.value)}
-            >
-              {budgetTypeOptions.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>
-                  <Box>
-                    <Typography>{opt.label}</Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      {opt.description}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {/* 분배 예산 기간 (금액 입력 전에 기간 설정) */}
-          {formData.budget_type === 'distributed' && (
-            <Stack direction="row" spacing={2}>
-              <TextField
-                type="date"
-                label="시작일"
-                value={formData.valid_from}
-                onChange={(e) => handleChange('valid_from', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-              <TextField
-                type="date"
-                label="종료일"
-                value={formData.valid_to}
-                onChange={(e) => handleChange('valid_to', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-            </Stack>
-          )}
-
-          <Box>
-            <AmountInput
-              label={getAmountLabel()}
-              value={formData.base_amount}
-              currency={formData.currency}
-              onChange={handleAmountChange}
-              sx={{ width: '100%' }}
-            />
-            {formData.budget_type === 'distributed' && formData.base_amount && formData.valid_from && formData.valid_to && (
-              <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
-                {getDistributedMonths()}개월 분배 → 월 {formData.currency} {getMonthlyAmount().toLocaleString()}
-              </Typography>
-            )}
-          </Box>
-
-          {/* 고정 예산일 경우 자동 생성 및 계좌 연결 */}
-          {formData.budget_type === 'fixed_monthly' && (
-            <>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={formData.auto_generate}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, auto_generate: e.target.checked }))}
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant="body2">자동 거래 생성</Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      체크하면 매월 자동으로 거래가 생성됩니다
-                    </Typography>
-                  </Box>
-                }
-              />
-              <FormControl fullWidth>
-                <InputLabel>연결 계좌 (선택)</InputLabel>
-                <Select
-                  value={formData.account_id}
-                  label="연결 계좌 (선택)"
-                  onChange={(e) => handleChange('account_id', e.target.value)}
-                >
-                  <MenuItem value="">
-                    <em>선택 안함</em>
-                  </MenuItem>
-                  {accounts.map((account) => (
-                    <MenuItem key={account.id} value={account.id}>
-                      {account.name} ({account.owner === 'self' ? '본인' : account.owner === 'spouse' ? '배우자' : '자녀'} · {account.currency})
-                    </MenuItem>
-                  ))}
-                </Select>
-                <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5 }}>
-                  계좌를 연결하면 자동 거래 생성 시 해당 계좌 잔고에 금액이 합산됩니다.
-                </Typography>
-              </FormControl>
-            </>
-          )}
+          <AmountInput
+            label="월 예산 금액"
+            value={formData.base_amount}
+            currency={formData.currency}
+            onChange={handleAmountChange}
+            sx={{ width: '100%' }}
+          />
 
           <FormControl fullWidth>
             <InputLabel>연결 카테고리</InputLabel>

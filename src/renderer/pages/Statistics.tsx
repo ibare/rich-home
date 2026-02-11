@@ -71,7 +71,6 @@ interface BudgetItemStat {
   id: string
   name: string
   group_name: string | null
-  budget_type: string
   budgetAmount: number  // 예산 금액 (KRW 환산)
   spentAmount: number   // 실제 지출 (KRW 환산)
   currency: string
@@ -493,8 +492,7 @@ export default function Statistics() {
 
       // 1. 예산 항목 목록 조회
       const budgetItems = await window.electronAPI.db.query(`
-        SELECT bi.id, bi.name, bi.group_name, bi.budget_type, bi.base_amount, bi.currency,
-               bi.valid_from, bi.valid_to,
+        SELECT bi.id, bi.name, bi.group_name, bi.base_amount, bi.currency,
                GROUP_CONCAT(bic.category_id) as category_ids,
                GROUP_CONCAT(c.name) as category_names
         FROM budget_items bi
@@ -507,11 +505,8 @@ export default function Statistics() {
         id: string
         name: string
         group_name: string | null
-        budget_type: string
         base_amount: number
         currency: string
-        valid_from: string | null
-        valid_to: string | null
         category_ids: string | null
         category_names: string | null
       }[]
@@ -545,18 +540,7 @@ export default function Statistics() {
 
       // 3. 예산 항목별 통계 계산
       const stats: BudgetItemStat[] = budgetItems.map(item => {
-        // 월 예산 금액 계산
-        let budgetAmount = item.base_amount
-        if (item.budget_type === 'distributed' && item.valid_from && item.valid_to) {
-          const from = new Date(item.valid_from)
-          const to = new Date(item.valid_to)
-          const monthCount = Math.max(1,
-            (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
-          )
-          budgetAmount = item.base_amount / monthCount
-        }
-
-        // KRW 환산
+        const budgetAmount = item.base_amount
         const budgetAmountKRW = item.currency === 'AED' ? budgetAmount * exchangeRate : budgetAmount
 
         // 연결된 카테고리들의 지출 합계
@@ -569,7 +553,6 @@ export default function Statistics() {
           id: item.id,
           name: item.name,
           group_name: item.group_name,
-          budget_type: item.budget_type,
           budgetAmount: Math.round(budgetAmountKRW),
           spentAmount: Math.round(spentAmount),
           currency: item.currency,
