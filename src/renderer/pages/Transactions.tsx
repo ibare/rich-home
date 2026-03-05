@@ -441,15 +441,29 @@ export default function Transactions() {
 
         // 고정 규칙에 계좌가 연결되어 있으면 해당 계좌 잔고에 금액 합산
         if (rule.rule_type === 'fixed_monthly' && rule.account_id) {
-          const latestBalance = (await window.electronAPI.db.get(`
-            SELECT balance FROM account_balances
+          const latestRecord = (await window.electronAPI.db.get(`
+            SELECT balance, recorded_at FROM account_balances
             WHERE account_id = ?
             ORDER BY recorded_at DESC, created_at DESC
             LIMIT 1
-          `, [rule.account_id])) as { balance: number } | undefined
+          `, [rule.account_id])) as { balance: number; recorded_at: string } | undefined
 
-          const currentBalance = latestBalance?.balance || 0
+          const currentBalance = latestRecord?.balance || 0
           const newBalance = currentBalance + monthlyAmount
+
+          // 마지막 기록보다 하루 뒤로 설정하여 항상 최신 기록이 되도록 함
+          let balanceRecordedAt = targetMonthStart
+          if (latestRecord?.recorded_at) {
+            const latestDate = new Date(latestRecord.recorded_at)
+            latestDate.setDate(latestDate.getDate() + 1)
+            const y = latestDate.getFullYear()
+            const m = String(latestDate.getMonth() + 1).padStart(2, '0')
+            const d = String(latestDate.getDate()).padStart(2, '0')
+            const hh = String(latestDate.getHours()).padStart(2, '0')
+            const mm = String(latestDate.getMinutes()).padStart(2, '0')
+            const ss = String(latestDate.getSeconds()).padStart(2, '0')
+            balanceRecordedAt = `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+          }
 
           await window.electronAPI.db.query(`
             INSERT INTO account_balances (id, account_id, balance, recorded_at, memo)
@@ -458,7 +472,7 @@ export default function Transactions() {
             uuidv4(),
             rule.account_id,
             newBalance,
-            targetMonthStart,
+            balanceRecordedAt,
             `[자동] ${rule.name} 예산 적립`
           ])
         }

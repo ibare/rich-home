@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -13,12 +13,20 @@ import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 
+interface EditBalanceItem {
+  id: string
+  balance: number
+  recorded_at: string
+  memo: string | null
+}
+
 interface BalanceModalProps {
   open: boolean
   onClose: () => void
   onSaved: () => void
   accountId: string
   currency: string
+  editItem?: EditBalanceItem | null
 }
 
 export default function BalanceModal({
@@ -27,12 +35,27 @@ export default function BalanceModal({
   onSaved,
   accountId,
   currency,
+  editItem,
 }: BalanceModalProps) {
   const [balance, setBalance] = useState('')
   const [recordedAt, setRecordedAt] = useState(
     new Date().toISOString().slice(0, 16)
   )
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open && editItem) {
+      setBalance(String(editItem.balance))
+      // recorded_at: '2026-02-11 07:43:00' → '2026-02-11T07:43'
+      const dt = new Date(editItem.recorded_at)
+      const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 16)
+      setRecordedAt(local)
+    } else if (open) {
+      setBalance('')
+      setRecordedAt(new Date().toISOString().slice(0, 16))
+    }
+  }, [open, editItem])
 
   const handleSubmit = async () => {
     const balanceNum = parseFloat(balance.replace(/,/g, ''))
@@ -43,14 +66,19 @@ export default function BalanceModal({
 
     setSaving(true)
     try {
-      await window.electronAPI.db.query(
-        `INSERT INTO account_balances (id, account_id, balance, recorded_at)
-         VALUES (?, ?, ?, ?)`,
-        [uuidv4(), accountId, balanceNum, recordedAt.replace('T', ' ') + ':00']
-      )
+      if (editItem) {
+        await window.electronAPI.db.query(
+          `UPDATE account_balances SET balance = ?, recorded_at = ? WHERE id = ?`,
+          [balanceNum, recordedAt.replace('T', ' ') + ':00', editItem.id]
+        )
+      } else {
+        await window.electronAPI.db.query(
+          `INSERT INTO account_balances (id, account_id, balance, recorded_at)
+           VALUES (?, ?, ?, ?)`,
+          [uuidv4(), accountId, balanceNum, recordedAt.replace('T', ' ') + ':00']
+        )
+      }
 
-      setBalance('')
-      setRecordedAt(new Date().toISOString().slice(0, 16))
       onSaved()
       onClose()
     } catch (error) {
@@ -61,24 +89,13 @@ export default function BalanceModal({
     }
   }
 
-  const handleClose = () => {
-    setBalance('')
-    setRecordedAt(new Date().toISOString().slice(0, 16))
-    onClose()
-  }
-
-  // AmountInput에서 잔고 변경 처리 (통화는 계좌에서 결정되므로 무시)
-  const handleBalanceChange = (amount: string) => {
-    setBalance(amount)
-  }
-
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle
         sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
       >
-        잔고 추가
-        <IconButton size="small" onClick={handleClose}>
+        {editItem ? '잔고 수정' : '잔고 추가'}
+        <IconButton size="small" onClick={onClose}>
           <IconX size={20} />
         </IconButton>
       </DialogTitle>
@@ -89,7 +106,7 @@ export default function BalanceModal({
             label="잔고"
             value={balance}
             currency={currency}
-            onChange={(amount) => handleBalanceChange(amount)}
+            onChange={(amount) => setBalance(amount)}
             autoFocus
             sx={{ width: '100%' }}
           />
@@ -108,11 +125,11 @@ export default function BalanceModal({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose} color="inherit">
+        <Button onClick={onClose} color="inherit">
           취소
         </Button>
         <Button onClick={handleSubmit} variant="contained" disabled={saving}>
-          {saving ? '저장 중...' : '저장'}
+          {saving ? '저장 중...' : editItem ? '수정' : '저장'}
         </Button>
       </DialogActions>
     </Dialog>

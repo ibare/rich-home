@@ -16,7 +16,7 @@ import {
   Chip,
   Button,
 } from '@mui/material'
-import { IconArrowLeft, IconTrash } from '@tabler/icons-react'
+import { IconArrowLeft, IconTrash, IconEdit } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import BalanceModal from '../components/modals/BalanceModal'
 import AmountText from '../components/shared/AmountText'
@@ -61,6 +61,7 @@ export default function AccountBalanceHistory() {
   const [balances, setBalances] = useState<BalanceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<BalanceRecord | null>(null)
 
   useEffect(() => {
     setOnAdd(() => setModalOpen(true))
@@ -220,13 +221,24 @@ export default function AccountBalanceHistory() {
                         />
                       </TableCell>
                       <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDelete(record.id)}
-                          color="error"
-                        >
-                          <IconTrash size={16} />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              setEditingRecord(record)
+                              setModalOpen(true)
+                            }}
+                          >
+                            <IconEdit size={16} />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDelete(record.id)}
+                            color="error"
+                          >
+                            <IconTrash size={16} />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -239,10 +251,11 @@ export default function AccountBalanceHistory() {
 
       <BalanceModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setEditingRecord(null) }}
         onSaved={loadData}
         accountId={accountId!}
         currency={account.currency}
+        editItem={editingRecord}
       />
     </Box>
   )
