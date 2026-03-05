@@ -30,10 +30,17 @@ interface Account {
   is_active: number
   latest_balance?: number
   latest_recorded_at?: string
+  has_auto_prev_month?: number
 }
 
 // 최근 데이터 입력일에 따른 아이콘 색상 결정
-const getIconColors = (recordedAt?: string): { icon: string; bg: string } | undefined => {
+const getIconColors = (account: Account): { icon: string; bg: string } | undefined => {
+  // 전달에 [자동] 메모가 있으면 진한색
+  if (account.has_auto_prev_month && account.has_auto_prev_month > 0) {
+    return { icon: '#00441b', bg: '#c8e6c9' }
+  }
+
+  const recordedAt = account.latest_recorded_at
   if (!recordedAt) return undefined
 
   const recorded = new Date(recordedAt)
@@ -95,6 +102,13 @@ export default function Accounts() {
 
   const loadAccounts = async () => {
     try {
+      // 전달 날짜 범위 계산
+      const now = new Date()
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const prevMonthStr = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`
+      const currentMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`
+
       const result = await window.electronAPI.db.query(`
         SELECT
           a.*,
@@ -103,11 +117,15 @@ export default function Accounts() {
            ORDER BY recorded_at DESC LIMIT 1) as latest_balance,
           (SELECT recorded_at FROM account_balances
            WHERE account_id = a.id
-           ORDER BY recorded_at DESC LIMIT 1) as latest_recorded_at
+           ORDER BY recorded_at DESC LIMIT 1) as latest_recorded_at,
+          (SELECT COUNT(*) FROM account_balances
+           WHERE account_id = a.id
+           AND memo LIKE '%[자동]%'
+           AND recorded_at >= ? AND recorded_at < ?) as has_auto_prev_month
         FROM accounts a
         WHERE a.is_active = 1
         ORDER BY a.owner, a.bank_name
-      `)
+      `, [prevMonthStr, currentMonthStr])
       setAccounts(result as Account[])
     } catch (error) {
       console.error('Failed to load accounts:', error)
@@ -182,7 +200,7 @@ export default function Accounts() {
               </Typography>
               <Stack spacing={2}>
                 {groupedAccounts[owner].map((account) => {
-                  const colors = getIconColors(account.latest_recorded_at)
+                  const colors = getIconColors(account)
                   return (
                   <Card
                     key={account.id}
