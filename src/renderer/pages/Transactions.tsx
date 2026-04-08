@@ -310,13 +310,13 @@ export default function Transactions() {
     })
   }
 
-  // 합계 계산 (통계 포함 거래만)
+  // 합계 계산 (통계 포함 거래만, AED는 KRW로 환산)
   const totalIncome = transactions
     .filter((t) => t.type === 'income' && t.include_in_stats === 1)
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + (t.currency === 'AED' ? t.amount * exchangeRate : t.amount), 0)
   const totalExpense = transactions
     .filter((t) => t.type === 'expense' && t.include_in_stats === 1)
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + (t.currency === 'AED' ? t.amount * exchangeRate : t.amount), 0)
 
   const handleBudgetCardDoubleClick = async (budgetItemId: string) => {
     try {
@@ -441,20 +441,20 @@ export default function Transactions() {
 
         // 고정 규칙에 계좌가 연결되어 있으면 해당 계좌 잔고에 금액 합산
         if (rule.rule_type === 'fixed_monthly' && rule.account_id) {
-          const latestRecord = (await window.electronAPI.db.get(`
-            SELECT balance, recorded_at FROM account_balances
+          // 1) recorded_at 결정: 거래 대상 월에 이미 잔고 기록이 있으면 마지막 기록 +1일,
+          //    없으면 그달의 1일 — 항상 대상 월 안에 위치하도록 보장
+          const lastInMonth = (await window.electronAPI.db.get(`
+            SELECT recorded_at FROM account_balances
             WHERE account_id = ?
+              AND recorded_at >= ?
+              AND recorded_at < ?
             ORDER BY recorded_at DESC, created_at DESC
             LIMIT 1
-          `, [rule.account_id])) as { balance: number; recorded_at: string } | undefined
+          `, [rule.account_id, targetMonthStart, targetMonthEnd])) as { recorded_at: string } | undefined
 
-          const currentBalance = latestRecord?.balance || 0
-          const newBalance = currentBalance + monthlyAmount
-
-          // 마지막 기록보다 하루 뒤로 설정하여 항상 최신 기록이 되도록 함
-          let balanceRecordedAt = targetMonthStart
-          if (latestRecord?.recorded_at) {
-            const latestDate = new Date(latestRecord.recorded_at)
+          let balanceRecordedAt: string
+          if (lastInMonth?.recorded_at) {
+            const latestDate = new Date(lastInMonth.recorded_at)
             latestDate.setDate(latestDate.getDate() + 1)
             const y = latestDate.getFullYear()
             const m = String(latestDate.getMonth() + 1).padStart(2, '0')
@@ -463,7 +463,20 @@ export default function Transactions() {
             const mm = String(latestDate.getMinutes()).padStart(2, '0')
             const ss = String(latestDate.getSeconds()).padStart(2, '0')
             balanceRecordedAt = `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+          } else {
+            balanceRecordedAt = `${targetMonthStart} 00:00:00`
           }
+
+          // 2) 새 기록 시점 직전의 잔고를 base로 사용 (현재 최신 잔고가 아닌 시점 기준)
+          const baseRecord = (await window.electronAPI.db.get(`
+            SELECT balance FROM account_balances
+            WHERE account_id = ?
+              AND recorded_at < ?
+            ORDER BY recorded_at DESC, created_at DESC
+            LIMIT 1
+          `, [rule.account_id, balanceRecordedAt])) as { balance: number } | undefined
+
+          const newBalance = (baseRecord?.balance || 0) + monthlyAmount
 
           await window.electronAPI.db.query(`
             INSERT INTO account_balances (id, account_id, balance, recorded_at, memo)
