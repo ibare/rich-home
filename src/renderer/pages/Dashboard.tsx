@@ -108,9 +108,8 @@ export default function Dashboard() {
           ? `${year + 1}-01-01`
           : `${year}-${String(month + 1).padStart(2, '0')}-01`
 
-      // TODO: 환율 키를 'aed_to_krw_rate'로 통일 필요 (Settings.tsx 기준)
       const exchangeRateSetting = (await window.electronAPI.db.query(
-        "SELECT value FROM settings WHERE key = 'exchange_rate_aed_krw'"
+        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
       )) as { value: string }[]
       const exchangeRate = exchangeRateSetting.length > 0
         ? parseFloat(exchangeRateSetting[0].value)

@@ -119,9 +119,8 @@ export default function Transactions() {
   // 환율 조회
   const loadExchangeRate = async () => {
     try {
-      // TODO: 환율 키를 'aed_to_krw_rate'로 통일 필요 (Settings.tsx 기준)
       const result = (await window.electronAPI.db.query(
-        `SELECT value FROM settings WHERE key = 'exchange_rate'`
+        `SELECT value FROM settings WHERE key = 'aed_to_krw_rate'`
       )) as { value: string }[]
       if (result.length > 0) {
         setExchangeRate(parseFloat(result[0].value))
