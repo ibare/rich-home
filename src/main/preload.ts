@@ -4,6 +4,8 @@ const electronAPI = {
   db: {
     query: (sql: string, params?: unknown[]) => ipcRenderer.invoke('db:query', sql, params),
     get: (sql: string, params?: unknown[]) => ipcRenderer.invoke('db:get', sql, params),
+    transaction: (queries: { sql: string; params?: unknown[] }[]) =>
+      ipcRenderer.invoke('db:transaction', queries) as Promise<unknown[]>,
     getPath: () => ipcRenderer.invoke('db:getPath') as Promise<{
       currentPath: string
       defaultPath: string

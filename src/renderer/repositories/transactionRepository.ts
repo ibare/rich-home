@@ -28,6 +28,7 @@ export async function getTransactions(year: number, month: number) {
     LEFT JOIN categories c ON t.category_id = c.id
     WHERE t.date >= ? AND t.date < ?
     ORDER BY t.date DESC, t.created_at DESC
+    LIMIT 1000
   `
   return await window.electronAPI.db.query(query, [startDate, endDate])
 }

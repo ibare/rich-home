@@ -141,6 +141,29 @@ ipcMain.handle('db:get', async (_event, sql: string, params?: unknown[]) => {
   }
 })
 
+// IPC Handler - Database transaction (다건 쿼리 원자적 실행)
+ipcMain.handle('db:transaction', async (_event, queries: { sql: string; params?: unknown[] }[]) => {
+  const db = getDatabase()
+  const transaction = db.transaction(() => {
+    const results = []
+    for (const { sql, params } of queries) {
+      const stmt = db.prepare(sql)
+      if (sql.trim().toUpperCase().startsWith('SELECT')) {
+        results.push(params ? stmt.all(...params) : stmt.all())
+      } else {
+        results.push(params ? stmt.run(...params) : stmt.run())
+      }
+    }
+    return results
+  })
+  try {
+    return transaction()
+  } catch (error) {
+    console.error('Database transaction error:', error)
+    throw error
+  }
+})
+
 // IPC Handlers - Database path management
 ipcMain.handle('db:getPath', async () => {
   return {
