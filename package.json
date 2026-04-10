@@ -18,7 +18,9 @@
     "publish": "npm run build && dotenv -e .env -- electron-builder --publish always",
     "publish:mac": "npm run build && dotenv -e .env -- electron-builder --mac --publish always",
     "publish:win": "npm run build && dotenv -e .env -- electron-builder --win --publish always",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "가계부",
@@ -40,6 +42,7 @@
     "electron-rebuild": "^3.2.9",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
+    "vitest": "^4.1.4",
     "wait-on": "^9.0.3"
   },
   "dependencies": {
