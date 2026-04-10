@@ -28,6 +28,7 @@ import { IconX, IconPlus, IconTrash } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import CategoryPicker from '../shared/CategoryPicker'
+import { useToast } from '../../contexts/ToastContext'
 
 interface EditTransaction {
   id: string
@@ -77,6 +78,7 @@ const getLastDayOfMonth = (year: number, month: number) => {
 }
 
 export default function TransactionModal({ open, onClose, onSaved, selectedYear, selectedMonth, editTransaction }: TransactionModalProps) {
+  const { showWarning, showError } = useToast()
   const [categories, setCategories] = useState<Category[]>([])
   const [pendingList, setPendingList] = useState<PendingTransaction[]>([])
   const isEditMode = !!editTransaction
@@ -214,12 +216,12 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   const handleAddToList = () => {
     const amount = parseFloat(formData.amount.replace(/,/g, ''))
     if (isNaN(amount) || amount <= 0) {
-      alert('금액을 입력해주세요.')
+      showWarning('금액을 입력해주세요.')
       return
     }
 
     if (!formData.category_id) {
-      alert('카테고리를 선택해주세요.')
+      showWarning('카테고리를 선택해주세요.')
       return
     }
 
@@ -263,12 +265,12 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
 
     const amount = parseFloat(formData.amount.replace(/,/g, ''))
     if (isNaN(amount) || amount <= 0) {
-      alert('금액을 입력해주세요.')
+      showWarning('금액을 입력해주세요.')
       return
     }
 
     if (!formData.category_id) {
-      alert('카테고리를 선택해주세요.')
+      showWarning('카테고리를 선택해주세요.')
       return
     }
 
@@ -297,7 +299,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
       onClose()
     } catch (error) {
       console.error('Failed to update transaction:', error)
-      alert('거래 수정에 실패했습니다.')
+      showError('거래 수정에 실패했습니다.')
     } finally {
       setSaving(false)
     }
@@ -306,7 +308,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   // 전체 저장
   const handleSaveAll = async () => {
     if (pendingList.length === 0) {
-      alert('저장할 거래가 없습니다.')
+      showWarning('저장할 거래가 없습니다.')
       return
     }
 
@@ -327,7 +329,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
       onClose()
     } catch (error) {
       console.error('Failed to save transactions:', error)
-      alert('거래 저장에 실패했습니다.')
+      showError('거래 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

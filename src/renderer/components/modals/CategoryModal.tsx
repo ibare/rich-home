@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import { useToast } from '../../contexts/ToastContext'
 
 interface Category {
   id: string
@@ -77,6 +78,7 @@ export default function CategoryModal({
     expense_type: 'variable' as 'fixed' | 'variable',
     color: colorOptions[0],
   })
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [transactionCount, setTransactionCount] = useState(0)
@@ -109,7 +111,7 @@ export default function CategoryModal({
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      alert('카테고리 이름은 필수입니다.')
+      showWarning('카테고리 이름은 필수입니다.')
       return
     }
 
@@ -154,7 +156,7 @@ export default function CategoryModal({
       handleClose()
     } catch (error) {
       console.error('Failed to save category:', error)
-      alert('카테고리 저장에 실패했습니다.')
+      showError('카테고리 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }
@@ -195,7 +197,7 @@ export default function CategoryModal({
       setDeleteDialogOpen(true)
     } catch (error) {
       console.error('Failed to check transactions:', error)
-      alert('삭제 확인 중 오류가 발생했습니다.')
+      showError('삭제 확인 중 오류가 발생했습니다.')
     }
   }
 
@@ -204,7 +206,7 @@ export default function CategoryModal({
 
     // 연결된 거래가 있으면 대체 카테고리 필수
     if (transactionCount > 0 && !replacementCategoryId) {
-      alert('대체 카테고리를 선택해주세요.')
+      showWarning('대체 카테고리를 선택해주세요.')
       return
     }
 
@@ -233,7 +235,7 @@ export default function CategoryModal({
       handleClose()
     } catch (error) {
       console.error('Failed to delete category:', error)
-      alert('카테고리 삭제에 실패했습니다.')
+      showError('카테고리 삭제에 실패했습니다.')
     }
   }
 

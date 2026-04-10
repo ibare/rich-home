@@ -12,6 +12,7 @@ import {
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
+import { useToast } from '../../contexts/ToastContext'
 
 interface EditBalanceItem {
   id: string
@@ -41,6 +42,7 @@ export default function BalanceModal({
   const [recordedAt, setRecordedAt] = useState(
     new Date().toISOString().slice(0, 16)
   )
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function BalanceModal({
   const handleSubmit = async () => {
     const balanceNum = parseFloat(balance.replace(/,/g, ''))
     if (isNaN(balanceNum)) {
-      alert('잔고를 입력해주세요.')
+      showWarning('잔고를 입력해주세요.')
       return
     }
 
@@ -83,7 +85,7 @@ export default function BalanceModal({
       onClose()
     } catch (error) {
       console.error('Failed to save balance:', error)
-      alert('잔고 저장에 실패했습니다.')
+      showError('잔고 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

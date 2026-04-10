@@ -20,6 +20,7 @@ import { IconArrowLeft, IconTrash, IconEdit } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import BalanceModal from '../components/modals/BalanceModal'
 import AmountText from '../components/shared/AmountText'
+import { useToast } from '../contexts/ToastContext'
 
 interface Account {
   id: string
@@ -57,6 +58,7 @@ export default function AccountBalanceHistory() {
   const { accountId } = useParams<{ accountId: string }>()
   const navigate = useNavigate()
   const { setPageTitle, setOnAdd } = usePageContext()
+  const { showError } = useToast()
   const [account, setAccount] = useState<Account | null>(null)
   const [balances, setBalances] = useState<BalanceRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -110,7 +112,7 @@ export default function AccountBalanceHistory() {
       loadData()
     } catch (error) {
       console.error('Failed to delete balance:', error)
-      alert('삭제에 실패했습니다.')
+      showError('삭제에 실패했습니다.')
     }
   }
 

@@ -16,6 +16,7 @@ import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import CategoryPicker from '../shared/CategoryPicker'
+import { useToast } from '../../contexts/ToastContext'
 
 interface BudgetItem {
   id: string
@@ -51,6 +52,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     memo: '',
     category_ids: [] as string[],
   })
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
   const [categoryPickerAnchor, setCategoryPickerAnchor] = useState<HTMLElement | null>(null)
   const [usedCategoryMap, setUsedCategoryMap] = useState<Record<string, string>>({})
@@ -132,18 +134,18 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
 
   const handleSubmit = async () => {
     if (!formData.name) {
-      alert('예산 항목명을 입력해주세요.')
+      showWarning('예산 항목명을 입력해주세요.')
       return
     }
 
     const amount = parseFloat(formData.base_amount.replace(/,/g, ''))
     if (isNaN(amount) || amount <= 0) {
-      alert('금액을 입력해주세요.')
+      showWarning('금액을 입력해주세요.')
       return
     }
 
     if (formData.category_ids.length === 0) {
-      alert('카테고리를 선택해주세요.')
+      showWarning('카테고리를 선택해주세요.')
       return
     }
 
@@ -207,7 +209,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
       onClose()
     } catch (error) {
       console.error('Failed to save budget item:', error)
-      alert('예산 항목 저장에 실패했습니다.')
+      showError('예산 항목 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

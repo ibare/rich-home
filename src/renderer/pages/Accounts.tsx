@@ -18,6 +18,7 @@ import { IconWallet, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AccountModal from '../components/modals/AccountModal'
 import AmountText from '../components/shared/AmountText'
+import { useToast } from '../contexts/ToastContext'
 
 interface Account {
   id: string
@@ -84,6 +85,7 @@ const typeLabels: Record<string, string> = {
 export default function Accounts() {
   const navigate = useNavigate()
   const { setPageTitle, setOnAdd } = usePageContext()
+  const { showError } = useToast()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -160,7 +162,7 @@ export default function Accounts() {
       loadAccounts()
     } catch (error) {
       console.error('Failed to delete account:', error)
-      alert('계좌 삭제에 실패했습니다.')
+      showError('계좌 삭제에 실패했습니다.')
     }
   }
 

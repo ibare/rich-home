@@ -27,6 +27,7 @@ import { usePageContext } from '../contexts/PageContext'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
 import { useExchangeRate } from '../hooks/useExchangeRate'
 import AmountText from '../components/shared/AmountText'
+import { useToast } from '../contexts/ToastContext'
 
 interface BudgetItem {
   id: string
@@ -55,6 +56,7 @@ export default function Budget() {
 
   // 환율
   const { exchangeRate } = useExchangeRate()
+  const { showError } = useToast()
 
   useEffect(() => {
     setPageTitle('예산 관리')
@@ -120,7 +122,7 @@ export default function Budget() {
       loadData()
     } catch (error) {
       console.error('Failed to delete budget item:', error)
-      alert('예산 항목 삭제에 실패했습니다.')
+      showError('예산 항목 삭제에 실패했습니다.')
     }
   }
 

@@ -20,6 +20,7 @@ import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import CategoryPicker from '../shared/CategoryPicker'
+import { useToast } from '../../contexts/ToastContext'
 
 interface AutoTransactionRule {
   id: string
@@ -72,6 +73,7 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
     valid_to: '',
     memo: '',
   })
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
   const [categoryPickerAnchor, setCategoryPickerAnchor] = useState<HTMLElement | null>(null)
 
@@ -148,23 +150,23 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
 
   const handleSubmit = async () => {
     if (!formData.name) {
-      alert('이름을 입력해주세요.')
+      showWarning('이름을 입력해주세요.')
       return
     }
 
     const amount = parseFloat(formData.base_amount.replace(/,/g, ''))
     if (isNaN(amount) || amount <= 0) {
-      alert('금액을 입력해주세요.')
+      showWarning('금액을 입력해주세요.')
       return
     }
 
     if (formData.rule_type === 'distributed') {
       if (!formData.valid_from || !formData.valid_to) {
-        alert('분배 규칙은 시작일과 종료일을 입력해주세요.')
+        showWarning('분배 규칙은 시작일과 종료일을 입력해주세요.')
         return
       }
       if (formData.valid_from > formData.valid_to) {
-        alert('종료일은 시작일보다 이후여야 합니다.')
+        showWarning('종료일은 시작일보다 이후여야 합니다.')
         return
       }
     }
@@ -215,7 +217,7 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
       onClose()
     } catch (error) {
       console.error('Failed to save auto transaction rule:', error)
-      alert('자동 거래 규칙 저장에 실패했습니다.')
+      showError('자동 거래 규칙 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

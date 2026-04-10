@@ -18,6 +18,7 @@ import { usePageContext } from '../contexts/PageContext'
 import AssetModal from '../components/modals/AssetModal'
 import AmountText from '../components/shared/AmountText'
 import { useExchangeRate } from '../hooks/useExchangeRate'
+import { useToast } from '../contexts/ToastContext'
 
 interface Asset {
   id: string
@@ -43,6 +44,7 @@ interface Liability {
 
 export default function Assets() {
   const { setPageTitle, setOnAdd } = usePageContext()
+  const { showError } = useToast()
   const [assets, setAssets] = useState<Asset[]>([])
   const [totalLiabilities, setTotalLiabilities] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -118,7 +120,7 @@ export default function Assets() {
       loadData()
     } catch (error) {
       console.error('Failed to delete asset:', error)
-      alert('자산 삭제에 실패했습니다.')
+      showError('자산 삭제에 실패했습니다.')
     }
   }
 

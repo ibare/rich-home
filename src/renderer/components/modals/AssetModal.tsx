@@ -17,6 +17,7 @@ import {
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
+import { useToast } from '../../contexts/ToastContext'
 
 interface AssetModalProps {
   open: boolean
@@ -39,6 +40,7 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
     currency: 'KRW',
     memo: '',
   })
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
 
   const handleChange = (field: string, value: string) => {
@@ -52,19 +54,19 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
 
   const handleSubmit = async () => {
     if (!formData.name) {
-      alert('자산명을 입력해주세요.')
+      showWarning('자산명을 입력해주세요.')
       return
     }
 
     const amount = parseFloat(formData.purchase_amount.replace(/,/g, ''))
     if (isNaN(amount) || amount <= 0) {
-      alert('취득 금액을 입력해주세요.')
+      showWarning('취득 금액을 입력해주세요.')
       return
     }
 
     const quantity = parseFloat(formData.quantity)
     if (isNaN(quantity) || quantity <= 0) {
-      alert('수량을 입력해주세요.')
+      showWarning('수량을 입력해주세요.')
       return
     }
 
@@ -90,7 +92,7 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
       onClose()
     } catch (error) {
       console.error('Failed to save asset:', error)
-      alert('자산 저장에 실패했습니다.')
+      showError('자산 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

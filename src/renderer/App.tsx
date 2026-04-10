@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { styled, Container, Box } from '@mui/material'
 import { PageProvider } from './contexts/PageContext'
+import { ToastProvider } from './contexts/ToastContext'
 import Sidebar from './components/layout/sidebar/Sidebar'
 import Header from './components/layout/header/Header'
 import Dashboard from './pages/Dashboard'
@@ -15,6 +16,7 @@ import Budget from './pages/Budget'
 import AutoTransactions from './pages/AutoTransactions'
 import Statistics from './pages/Statistics'
 import Settings from './pages/Settings'
+import ErrorBoundary from './components/shared/ErrorBoundary'
 
 const MainWrapper = styled('div')(() => ({
   display: 'flex',
@@ -38,6 +40,7 @@ function App() {
 
   return (
     <HashRouter>
+      <ToastProvider>
       <PageProvider>
         <MainWrapper>
           <Sidebar isCollapsed={isSidebarCollapsed} />
@@ -86,24 +89,27 @@ function App() {
                   maxWidth: '1200px',
                 }}
               >
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/transactions" element={<Transactions />} />
-                  <Route path="/accounts" element={<Accounts />} />
-                  <Route path="/accounts/:accountId" element={<AccountBalanceHistory />} />
-                  <Route path="/assets" element={<Assets />} />
-                  <Route path="/liabilities" element={<Liabilities />} />
-                  <Route path="/categories" element={<Categories />} />
-                  <Route path="/budget" element={<Budget />} />
-                  <Route path="/auto-transactions" element={<AutoTransactions />} />
-                  <Route path="/statistics" element={<Statistics />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/transactions" element={<Transactions />} />
+                    <Route path="/accounts" element={<Accounts />} />
+                    <Route path="/accounts/:accountId" element={<AccountBalanceHistory />} />
+                    <Route path="/assets" element={<Assets />} />
+                    <Route path="/liabilities" element={<Liabilities />} />
+                    <Route path="/categories" element={<Categories />} />
+                    <Route path="/budget" element={<Budget />} />
+                    <Route path="/auto-transactions" element={<AutoTransactions />} />
+                    <Route path="/statistics" element={<Statistics />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Routes>
+                </ErrorBoundary>
               </Container>
             </Box>
           </PageWrapper>
         </MainWrapper>
       </PageProvider>
+      </ToastProvider>
     </HashRouter>
   )
 }

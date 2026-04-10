@@ -5,7 +5,6 @@ import {
   Stack,
   Card,
   IconButton,
-  Snackbar,
   Table,
   TableBody,
   TableCell,
@@ -24,6 +23,7 @@ import { IconEdit, IconTrash, IconCircleCheck, IconAlertTriangle, IconClock } fr
 import { usePageContext } from '../contexts/PageContext'
 import AutoTransactionRuleModal from '../components/modals/AutoTransactionRuleModal'
 import AmountText from '../components/shared/AmountText'
+import { useToast } from '../contexts/ToastContext'
 
 interface AutoTransactionRule {
   id: string
@@ -42,6 +42,7 @@ interface AutoTransactionRule {
 
 export default function AutoTransactions() {
   const { setPageTitle, setOnAdd } = usePageContext()
+  const { showWarning, showError } = useToast()
   const [rules, setRules] = useState<AutoTransactionRule[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -49,7 +50,6 @@ export default function AutoTransactions() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingItem, setDeletingItem] = useState<AutoTransactionRule | null>(null)
   const [activeTab, setActiveTab] = useState(0)
-  const [toastMessage, setToastMessage] = useState('')
 
   useEffect(() => {
     setPageTitle('자동 거래 생성 규칙')
@@ -124,7 +124,7 @@ export default function AutoTransactions() {
       loadData()
     } catch (error) {
       console.error('Failed to delete auto transaction rule:', error)
-      alert('자동 거래 규칙 삭제에 실패했습니다.')
+      showError('자동 거래 규칙 삭제에 실패했습니다.')
     }
   }
 
@@ -221,7 +221,7 @@ export default function AutoTransactions() {
                             <Box
                               component="span"
                               sx={{ display: 'flex', cursor: 'pointer' }}
-                              onClick={(e) => { e.stopPropagation(); setToastMessage(status.message) }}
+                              onClick={(e) => { e.stopPropagation(); showWarning(status.message) }}
                             >
                               {status.type === 'expired'
                                 ? <IconClock size={18} color="#f44336" />
@@ -316,13 +316,6 @@ export default function AutoTransactions() {
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={!!toastMessage}
-        autoHideDuration={3000}
-        onClose={() => setToastMessage('')}
-        message={toastMessage}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      />
     </Box>
   )
 }

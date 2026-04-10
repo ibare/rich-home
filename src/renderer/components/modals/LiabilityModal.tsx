@@ -16,6 +16,7 @@ import {
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
+import { useToast } from '../../contexts/ToastContext'
 
 interface Liability {
   id: string
@@ -57,6 +58,7 @@ export default function LiabilityModal({ open, onClose, onSaved, editItem }: Lia
     currency: 'KRW',
     memo: '',
   })
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
 
   const isEditMode = !!editItem
@@ -95,13 +97,13 @@ export default function LiabilityModal({ open, onClose, onSaved, editItem }: Lia
 
   const handleSubmit = async () => {
     if (!formData.name) {
-      alert('부채명을 입력해주세요.')
+      showWarning('부채명을 입력해주세요.')
       return
     }
 
     const principalAmount = parseFloat(formData.principal_amount.replace(/,/g, ''))
     if (isNaN(principalAmount) || principalAmount <= 0) {
-      alert('원금을 입력해주세요.')
+      showWarning('원금을 입력해주세요.')
       return
     }
 
@@ -110,7 +112,7 @@ export default function LiabilityModal({ open, onClose, onSaved, editItem }: Lia
       : principalAmount
 
     if (isNaN(currentBalance) || currentBalance < 0) {
-      alert('올바른 현재 잔액을 입력해주세요.')
+      showWarning('올바른 현재 잔액을 입력해주세요.')
       return
     }
 
@@ -161,7 +163,7 @@ export default function LiabilityModal({ open, onClose, onSaved, editItem }: Lia
       onClose()
     } catch (error) {
       console.error('Failed to save liability:', error)
-      alert('부채 저장에 실패했습니다.')
+      showError('부채 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

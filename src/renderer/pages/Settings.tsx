@@ -27,6 +27,7 @@ import {
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import { getExchangeRate, saveExchangeRate } from '../repositories/settingsRepository'
+import { useToast } from '../contexts/ToastContext'
 
 interface DbPathInfo {
   currentPath: string
@@ -36,6 +37,7 @@ interface DbPathInfo {
 
 export default function Settings() {
   const { setPageTitle, setOnAdd } = usePageContext()
+  const { showWarning, showError } = useToast()
   const [exchangeRate, setExchangeRate] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -75,7 +77,7 @@ export default function Settings() {
   const handleSaveExchangeRate = async () => {
     const rate = parseFloat(exchangeRate.replace(/,/g, ''))
     if (isNaN(rate) || rate <= 0) {
-      alert('올바른 환율을 입력해주세요.')
+      showWarning('올바른 환율을 입력해주세요.')
       return
     }
 
@@ -86,7 +88,7 @@ export default function Settings() {
       setTimeout(() => setSaved(false), 2000)
     } catch (error) {
       console.error('Failed to save exchange rate:', error)
-      alert('환율 저장에 실패했습니다.')
+      showError('환율 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }
@@ -130,11 +132,11 @@ export default function Settings() {
           loadDbPath()
         }
       } else {
-        alert(result.error || '경로 변경에 실패했습니다.')
+        showError(result.error || '경로 변경에 실패했습니다.')
       }
     } catch (error) {
       console.error('Failed to change DB path:', error)
-      alert('경로 변경에 실패했습니다.')
+      showError('경로 변경에 실패했습니다.')
     } finally {
       setChangingPath(false)
     }
@@ -152,11 +154,11 @@ export default function Settings() {
           loadDbPath()
         }
       } else {
-        alert(result.error || '경로 초기화에 실패했습니다.')
+        showError(result.error || '경로 초기화에 실패했습니다.')
       }
     } catch (error) {
       console.error('Failed to reset DB path:', error)
-      alert('경로 초기화에 실패했습니다.')
+      showError('경로 초기화에 실패했습니다.')
     }
   }
 

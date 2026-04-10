@@ -19,6 +19,7 @@ import {
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
 import { v4 as uuidv4 } from 'uuid'
+import { useToast } from '../../contexts/ToastContext'
 
 interface AccountModalProps {
   open: boolean
@@ -53,6 +54,7 @@ export default function AccountModal({ open, onClose, onSaved }: AccountModalPro
     account_number: '',
     currency: 'KRW',
   })
+  const { showWarning, showError } = useToast()
   const [saving, setSaving] = useState(false)
 
   const handleChange = (field: string, value: string) => {
@@ -61,7 +63,7 @@ export default function AccountModal({ open, onClose, onSaved }: AccountModalPro
 
   const handleSubmit = async () => {
     if (!formData.bank_name) {
-      alert('은행명은 필수입니다.')
+      showWarning('은행명은 필수입니다.')
       return
     }
 
@@ -101,7 +103,7 @@ export default function AccountModal({ open, onClose, onSaved }: AccountModalPro
       onClose()
     } catch (error) {
       console.error('Failed to save account:', error)
-      alert('계좌 저장에 실패했습니다.')
+      showError('계좌 저장에 실패했습니다.')
     } finally {
       setSaving(false)
     }

@@ -27,6 +27,7 @@ import MonthNavigation from '../components/shared/MonthNavigation'
 import { STORAGE_KEYS } from '../../shared/constants'
 import { useExchangeRate } from '../hooks/useExchangeRate'
 import * as transactionRepo from '../repositories/transactionRepository'
+import { useToast } from '../contexts/ToastContext'
 
 interface Transaction {
   id: string
@@ -56,6 +57,7 @@ interface BudgetSummary {
 export default function Transactions() {
   const { setPageTitle, setOnAdd } = usePageContext()
   const { exchangeRate } = useExchangeRate()
+  const { showSuccess, showWarning, showError } = useToast()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgetSummaries, setBudgetSummaries] = useState<BudgetSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -182,7 +184,7 @@ export default function Transactions() {
       loadBudgetSummaries()
     } catch (error) {
       console.error('Failed to delete transaction:', error)
-      alert('삭제에 실패했습니다.')
+      showError('삭제에 실패했습니다.')
     }
   }
 
@@ -267,7 +269,7 @@ export default function Transactions() {
       }[]
 
       if (rules.length === 0) {
-        alert('생성할 자동 거래 규칙이 없습니다.')
+        showWarning('생성할 자동 거래 규칙이 없습니다.')
         return
       }
 
@@ -379,13 +381,13 @@ export default function Transactions() {
       }
 
       const message = `${createdCount}건의 거래가 생성되었습니다.`
-      alert(message)
+      showSuccess(message)
       loadTransactions()
       loadMonthsWithData()
       loadBudgetSummaries()
     } catch (error) {
       console.error('Failed to generate auto transactions:', error)
-      alert('자동 거래 생성에 실패했습니다.')
+      showError('자동 거래 생성에 실패했습니다.')
     }
   }
 
