@@ -19,7 +19,9 @@
     "publish:mac": "npm run build && dotenv -e .env -- electron-builder --mac --publish always",
     "publish:win": "npm run build && dotenv -e .env -- electron-builder --win --publish always",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "pretest": "npm rebuild better-sqlite3 --silent",
     "test": "vitest run",
+    "posttest": "electron-rebuild -f -w better-sqlite3 --silent",
     "test:watch": "vitest"
   },
   "keywords": [
