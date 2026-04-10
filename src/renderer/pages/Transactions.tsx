@@ -26,6 +26,7 @@ import CategoryPicker from '../components/shared/CategoryPicker'
 import MonthNavigation from '../components/shared/MonthNavigation'
 import { STORAGE_KEYS } from '../../shared/constants'
 import { useExchangeRate } from '../hooks/useExchangeRate'
+import * as transactionRepo from '../repositories/transactionRepository'
 
 interface Transaction {
   id: string
@@ -124,12 +125,9 @@ export default function Transactions() {
     } else {
       // 선택: 해당 예산에 연결된 카테고리 ID들 조회
       try {
-        const result = await window.electronAPI.db.query(
-          'SELECT category_id FROM budget_item_categories WHERE budget_item_id = ?',
-          [budgetItemId]
-        ) as { category_id: string }[]
+        const categoryIds = await transactionRepo.getBudgetCategoryIds(budgetItemId)
         setSelectedBudgetItem(budgetItemId)
-        setSelectedBudgetCategoryIds(result.map(r => r.category_id))
+        setSelectedBudgetCategoryIds(categoryIds)
       } catch (error) {
         console.error('Failed to load budget categories:', error)
       }
@@ -144,14 +142,7 @@ export default function Transactions() {
   // 해당 연도의 월별 데이터 존재 여부 조회
   const loadMonthsWithData = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        `SELECT DISTINCT CAST(strftime('%m', date) AS INTEGER) as month
-         FROM transactions
-         WHERE strftime('%Y', date) = ?`,
-        [String(selectedYear)]
-      ) as { month: number }[]
-
-      setMonthsWithData(new Set(result.map((r) => r.month)))
+      setMonthsWithData(await transactionRepo.getMonthsWithData(selectedYear))
     } catch (error) {
       console.error('Failed to load months with data:', error)
     }
@@ -160,33 +151,7 @@ export default function Transactions() {
   const loadTransactions = async () => {
     setLoading(true)
     try {
-      const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
-      const endDate =
-        selectedMonth === 12
-          ? `${selectedYear + 1}-01-01`
-          : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
-
-      const query = `
-        SELECT t.*, COALESCE(c.name, '(카테고리 없음)') as category_name,
-          (SELECT bi.id FROM budget_item_categories bic
-           JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-           WHERE bic.category_id = t.category_id
-           LIMIT 1) as budget_item_id,
-          (SELECT bi.name FROM budget_item_categories bic
-           JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-           WHERE bic.category_id = t.category_id
-           LIMIT 1) as budget_item_name,
-          (SELECT COALESCE(bi.group_name, '미분류') FROM budget_item_categories bic
-           JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-           WHERE bic.category_id = t.category_id
-           LIMIT 1) as budget_group_name
-        FROM transactions t
-        LEFT JOIN categories c ON t.category_id = c.id
-        WHERE t.date >= ? AND t.date < ?
-        ORDER BY t.date DESC, t.created_at DESC
-      `
-
-      const result = await window.electronAPI.db.query(query, [startDate, endDate])
+      const result = await transactionRepo.getTransactions(selectedYear, selectedMonth)
       setTransactions(result as Transaction[])
     } catch (error) {
       console.error('Failed to load transactions:', error)
@@ -198,71 +163,7 @@ export default function Transactions() {
   // 예산 항목별 지출 집계 조회
   const loadBudgetSummaries = async () => {
     try {
-      const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
-      const endDate =
-        selectedMonth === 12
-          ? `${selectedYear + 1}-01-01`
-          : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
-
-      // 예산 항목별로 집계
-      // 환율을 적용하여 모든 금액을 KRW로 환산
-      const budgetQuery = `
-        SELECT
-          bi.id as budget_item_id,
-          bi.name as budget_item_name,
-          CASE WHEN bi.currency = 'AED'
-            THEN bi.base_amount * ?
-            ELSE bi.base_amount
-          END as budget_amount,
-          COALESCE(GROUP_CONCAT(c.name, ', '), '') as category_names
-        FROM budget_items bi
-        LEFT JOIN budget_item_categories bic ON bic.budget_item_id = bi.id
-        LEFT JOIN categories c ON c.id = bic.category_id
-        WHERE bi.is_active = 1
-        GROUP BY bi.id
-        ORDER BY bi.sort_order
-      `
-
-      const budgetResult = await window.electronAPI.db.query(budgetQuery, [
-        exchangeRate,
-      ]) as { budget_item_id: string; budget_item_name: string; budget_amount: number; category_names: string }[]
-
-      // 예산 항목별 지출 집계
-      const spentQuery = `
-        SELECT
-          bi.id as budget_item_id,
-          COALESCE(SUM(
-            CASE WHEN t.currency = 'AED'
-              THEN t.amount * ?
-              ELSE t.amount
-            END
-          ), 0) as spent_amount
-        FROM budget_items bi
-        LEFT JOIN budget_item_categories bic ON bic.budget_item_id = bi.id
-        LEFT JOIN transactions t ON t.category_id = bic.category_id
-          AND t.date >= ?
-          AND t.date < ?
-          AND t.type = 'expense'
-          AND t.include_in_stats = 1
-        WHERE bi.is_active = 1
-        GROUP BY bi.id
-      `
-
-      const spentResult = await window.electronAPI.db.query(spentQuery, [
-        exchangeRate,
-        startDate,
-        endDate,
-      ]) as { budget_item_id: string; spent_amount: number }[]
-
-      // 결과 병합
-      const spentMap = new Map(spentResult.map(r => [r.budget_item_id, r.spent_amount]))
-      const result = budgetResult.map(b => ({
-        budget_item_id: b.budget_item_id,
-        budget_item_name: b.budget_item_name,
-        budget_amount: b.budget_amount,
-        spent_amount: spentMap.get(b.budget_item_id) || 0,
-        category_names: b.category_names,
-      }))
+      const result = await transactionRepo.getBudgetSummaries(selectedYear, selectedMonth, exchangeRate)
       setBudgetSummaries(result as BudgetSummary[])
     } catch (error) {
       console.error('Failed to load budget summaries:', error)
@@ -273,7 +174,7 @@ export default function Transactions() {
     if (!deletingId) return
 
     try {
-      await window.electronAPI.db.query('DELETE FROM transactions WHERE id = ?', [deletingId])
+      await transactionRepo.deleteTransaction(deletingId)
       setDeleteConfirmOpen(false)
       setDeletingId(null)
       loadTransactions()
