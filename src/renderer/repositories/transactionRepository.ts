@@ -161,6 +161,14 @@ export async function updateTransaction(id: string, data: {
   )
 }
 
+// 거래 카테고리 변경
+export async function updateTransactionCategory(id: string, categoryId: string) {
+  await window.electronAPI.db.query(
+    `UPDATE transactions SET category_id = ?, updated_at = datetime('now') WHERE id = ?`,
+    [categoryId, id]
+  )
+}
+
 // 거래 생성
 export async function createTransaction(data: {
   id: string

@@ -92,6 +92,14 @@ export async function updateBudgetItem(id: string, data: {
   }
 }
 
+// 예산 항목 단일 조회
+export async function getBudgetItem(id: string) {
+  return await window.electronAPI.db.get(
+    'SELECT id, name, group_name, base_amount, currency, memo FROM budget_items WHERE id = ?',
+    [id]
+  )
+}
+
 // 예산 항목 삭제 (카테고리 매핑 포함)
 export async function deleteBudgetItem(id: string) {
   await window.electronAPI.db.query(
