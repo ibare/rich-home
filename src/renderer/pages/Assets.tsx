@@ -17,7 +17,7 @@ import { IconHome, IconChartLine, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AssetModal from '../components/modals/AssetModal'
 import AmountText from '../components/shared/AmountText'
-import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS } from '../../shared/constants'
+import { useExchangeRate } from '../hooks/useExchangeRate'
 
 interface Asset {
   id: string
@@ -47,7 +47,7 @@ export default function Assets() {
   const [totalLiabilities, setTotalLiabilities] = useState(0)
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
-  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
+  const { exchangeRate } = useExchangeRate()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null)
 
@@ -59,28 +59,21 @@ export default function Assets() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [exchangeRate])
 
   const loadData = async () => {
     try {
-      const [assetsResult, liabilitiesResult, rateResult] = await Promise.all([
+      const [assetsResult, liabilitiesResult] = await Promise.all([
         window.electronAPI.db.query(
           'SELECT * FROM assets WHERE is_active = 1 ORDER BY type, purchase_date DESC'
         ),
         window.electronAPI.db.query(
           'SELECT current_balance, currency FROM liabilities WHERE is_active = 1'
         ),
-        window.electronAPI.db.get(
-          `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
-        ),
       ])
       setAssets(assetsResult as Asset[])
 
-      let rate = DEFAULT_EXCHANGE_RATE
-      if (rateResult) {
-        rate = parseFloat((rateResult as { value: string }).value)
-        setExchangeRate(rate)
-      }
+      const rate = exchangeRate
 
       // 부채 총액 계산 (원화 환산)
       const liabilities = liabilitiesResult as Liability[]

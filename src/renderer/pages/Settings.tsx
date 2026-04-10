@@ -26,7 +26,7 @@ import {
 } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
-import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS } from '../../shared/constants'
+import { getExchangeRate, saveExchangeRate } from '../repositories/settingsRepository'
 
 interface DbPathInfo {
   currentPath: string
@@ -59,19 +59,8 @@ export default function Settings() {
   }, [])
 
   const loadSettings = async () => {
-    try {
-      const result = await window.electronAPI.db.get(
-        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
-      )
-      if (result) {
-        setExchangeRate((result as { value: string }).value)
-      } else {
-        setExchangeRate(String(DEFAULT_EXCHANGE_RATE))
-      }
-    } catch (error) {
-      console.error('Failed to load settings:', error)
-      setExchangeRate(String(DEFAULT_EXCHANGE_RATE))
-    }
+    const rate = await getExchangeRate()
+    setExchangeRate(String(rate))
   }
 
   const loadDbPath = async () => {
@@ -92,12 +81,7 @@ export default function Settings() {
 
     setSaving(true)
     try {
-      await window.electronAPI.db.query(
-        `INSERT INTO settings (key, value, updated_at)
-         VALUES ('${SETTINGS_KEYS.AED_TO_KRW_RATE}', ?, datetime('now'))
-         ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')`,
-        [rate.toString(), rate.toString()]
-      )
+      await saveExchangeRate(rate)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (error) {

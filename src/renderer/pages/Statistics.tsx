@@ -41,7 +41,8 @@ import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import AmountText from '../components/shared/AmountText'
 import MonthNavigation from '../components/shared/MonthNavigation'
-import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS, CATEGORY_COLORS, CHART_COLORS } from '../../shared/constants'
+import { CATEGORY_COLORS, CHART_COLORS } from '../../shared/constants'
+import { useExchangeRate } from '../hooks/useExchangeRate'
 
 interface MonthlyData {
   month: string
@@ -103,7 +104,7 @@ export default function Statistics() {
 
   // 공통 상태
   const [loading, setLoading] = useState(true)
-  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
+  const { exchangeRate } = useExchangeRate()
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
@@ -171,14 +172,7 @@ export default function Statistics() {
   const loadMonthlyData = async () => {
     setLoading(true)
     try {
-      // 환율 조회
-      const exchangeRateSetting = (await window.electronAPI.db.query(
-        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
-      )) as { value: string }[]
-      const rate = exchangeRateSetting.length > 0
-        ? parseFloat(exchangeRateSetting[0].value)
-        : DEFAULT_EXCHANGE_RATE
-      setExchangeRate(rate)
+      const rate = exchangeRate
 
       // 월별 수입/지출 집계 (통계 포함 거래만)
       const result = await window.electronAPI.db.query(`

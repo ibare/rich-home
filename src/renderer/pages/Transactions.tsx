@@ -24,7 +24,8 @@ import BudgetItemModal from '../components/modals/BudgetItemModal'
 import AmountText from '../components/shared/AmountText'
 import CategoryPicker from '../components/shared/CategoryPicker'
 import MonthNavigation from '../components/shared/MonthNavigation'
-import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS, STORAGE_KEYS } from '../../shared/constants'
+import { STORAGE_KEYS } from '../../shared/constants'
+import { useExchangeRate } from '../hooks/useExchangeRate'
 
 interface Transaction {
   id: string
@@ -53,13 +54,13 @@ interface BudgetSummary {
 
 export default function Transactions() {
   const { setPageTitle, setOnAdd } = usePageContext()
+  const { exchangeRate } = useExchangeRate()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgetSummaries, setBudgetSummaries] = useState<BudgetSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<string | null>(null)
   const [selectedBudgetCategoryIds, setSelectedBudgetCategoryIds] = useState<string[]>([])
   const [budgetDisplayCurrency, setBudgetDisplayCurrency] = useState<'KRW' | 'AED'>(() => {
@@ -113,23 +114,6 @@ export default function Transactions() {
     setSelectedBudgetCategoryIds([])
   }, [selectedYear, selectedMonth, exchangeRate])
 
-  useEffect(() => {
-    loadExchangeRate()
-  }, [])
-
-  // 환율 조회
-  const loadExchangeRate = async () => {
-    try {
-      const result = (await window.electronAPI.db.query(
-        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
-      )) as { value: string }[]
-      if (result.length > 0) {
-        setExchangeRate(parseFloat(result[0].value))
-      }
-    } catch (error) {
-      console.error('Failed to load exchange rate:', error)
-    }
-  }
 
   // 예산 항목 선택 토글 (단일 선택)
   const toggleBudgetItemSelection = async (budgetItemId: string) => {
