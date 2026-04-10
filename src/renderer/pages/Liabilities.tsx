@@ -12,6 +12,7 @@ import { IconHome, IconCreditCard, IconCar, IconReceipt, IconEdit } from '@table
 import { usePageContext } from '../contexts/PageContext'
 import LiabilityModal from '../components/modals/LiabilityModal'
 import AmountText from '../components/shared/AmountText'
+import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS } from '../../shared/constants'
 
 interface Liability {
   id: string
@@ -48,7 +49,7 @@ export default function Liabilities() {
   const [liabilities, setLiabilities] = useState<Liability[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
-  const [exchangeRate, setExchangeRate] = useState(385)
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
   const [editingLiability, setEditingLiability] = useState<Liability | null>(null)
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function Liabilities() {
           'SELECT * FROM liabilities WHERE is_active = 1 ORDER BY type, start_date DESC'
         ),
         window.electronAPI.db.get(
-          "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+          `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
         ),
       ])
       setLiabilities(liabilitiesResult as Liability[])

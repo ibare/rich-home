@@ -20,6 +20,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import AmountText from '../components/shared/AmountText'
+import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS } from '../../shared/constants'
 
 interface Transaction {
   id: string
@@ -83,7 +84,7 @@ export default function Dashboard() {
     recentTransactions: [],
     categoryExpenses: [],
     monthlyBudgetComparison: [],
-    exchangeRate: 370,
+    exchangeRate: DEFAULT_EXCHANGE_RATE,
   })
 
   useEffect(() => {
@@ -109,11 +110,11 @@ export default function Dashboard() {
           : `${year}-${String(month + 1).padStart(2, '0')}-01`
 
       const exchangeRateSetting = (await window.electronAPI.db.query(
-        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
       )) as { value: string }[]
       const exchangeRate = exchangeRateSetting.length > 0
         ? parseFloat(exchangeRateSetting[0].value)
-        : 370
+        : DEFAULT_EXCHANGE_RATE
 
       // 계좌 잔고 (각 계좌의 최신 잔고)
       const accountBalances = (await window.electronAPI.db.query(`

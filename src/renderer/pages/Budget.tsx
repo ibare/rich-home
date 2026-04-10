@@ -25,6 +25,7 @@ import {
 } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import BudgetItemModal from '../components/modals/BudgetItemModal'
+import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS } from '../../shared/constants'
 import AmountText from '../components/shared/AmountText'
 
 interface BudgetItem {
@@ -53,7 +54,7 @@ export default function Budget() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
 
   // 환율
-  const [exchangeRate, setExchangeRate] = useState(385)
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
 
   useEffect(() => {
     setPageTitle('예산 관리')
@@ -65,7 +66,7 @@ export default function Budget() {
   const loadExchangeRate = async () => {
     try {
       const result = await window.electronAPI.db.get(
-        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
       ) as { value: string } | undefined
       if (result) {
         setExchangeRate(parseFloat(result.value))

@@ -41,6 +41,7 @@ import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import AmountText from '../components/shared/AmountText'
 import MonthNavigation from '../components/shared/MonthNavigation'
+import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS, CATEGORY_COLORS, CHART_COLORS } from '../../shared/constants'
 
 interface MonthlyData {
   month: string
@@ -92,12 +93,7 @@ interface TagStat {
   color: string
 }
 
-// 카테고리별 색상 팔레트
-const CATEGORY_COLORS = [
-  '#5D87FF', '#13DEB9', '#FFAE1F', '#FA896B', '#49BEFF',
-  '#9C27B0', '#4CAF50', '#FF5722', '#607D8B', '#795548',
-  '#E91E63', '#00BCD4', '#8BC34A', '#FFC107', '#3F51B5',
-]
+// CATEGORY_COLORS: src/shared/constants.ts 에서 import
 
 export default function Statistics() {
   const { setPageTitle, setOnAdd } = usePageContext()
@@ -107,7 +103,7 @@ export default function Statistics() {
 
   // 공통 상태
   const [loading, setLoading] = useState(true)
-  const [exchangeRate, setExchangeRate] = useState(385)
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
@@ -177,11 +173,11 @@ export default function Statistics() {
     try {
       // 환율 조회
       const exchangeRateSetting = (await window.electronAPI.db.query(
-        "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
       )) as { value: string }[]
       const rate = exchangeRateSetting.length > 0
         ? parseFloat(exchangeRateSetting[0].value)
-        : 385
+        : DEFAULT_EXCHANGE_RATE
       setExchangeRate(rate)
 
       // 월별 수입/지출 집계 (통계 포함 거래만)
@@ -670,14 +666,8 @@ export default function Statistics() {
     ? ((lastMonthWithData.expense - prevMonthWithData.expense) / prevMonthWithData.expense) * 100
     : 0
 
-  // 차트 색상
-  const colors = {
-    income: '#13DEB9',
-    incomeLight: '#E6FFFA',
-    expense: '#5D87FF',
-    expenseLight: '#ECF2FF',
-    balance: '#49BEFF',
-  }
+  // 차트 색상: src/shared/constants.ts CHART_COLORS 사용
+  const colors = CHART_COLORS
 
   const formatYAxis = (value: number) => {
     if (value >= 100000000) {

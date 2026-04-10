@@ -17,6 +17,7 @@ import { IconHome, IconChartLine, IconTrash } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import AssetModal from '../components/modals/AssetModal'
 import AmountText from '../components/shared/AmountText'
+import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS } from '../../shared/constants'
 
 interface Asset {
   id: string
@@ -46,7 +47,7 @@ export default function Assets() {
   const [totalLiabilities, setTotalLiabilities] = useState(0)
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
-  const [exchangeRate, setExchangeRate] = useState(385)
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null)
 
@@ -70,12 +71,12 @@ export default function Assets() {
           'SELECT current_balance, currency FROM liabilities WHERE is_active = 1'
         ),
         window.electronAPI.db.get(
-          "SELECT value FROM settings WHERE key = 'aed_to_krw_rate'"
+          `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
         ),
       ])
       setAssets(assetsResult as Asset[])
 
-      let rate = 385
+      let rate = DEFAULT_EXCHANGE_RATE
       if (rateResult) {
         rate = parseFloat((rateResult as { value: string }).value)
         setExchangeRate(rate)

@@ -24,6 +24,7 @@ import BudgetItemModal from '../components/modals/BudgetItemModal'
 import AmountText from '../components/shared/AmountText'
 import CategoryPicker from '../components/shared/CategoryPicker'
 import MonthNavigation from '../components/shared/MonthNavigation'
+import { DEFAULT_EXCHANGE_RATE, SETTINGS_KEYS, STORAGE_KEYS } from '../../shared/constants'
 
 interface Transaction {
   id: string
@@ -58,11 +59,11 @@ export default function Transactions() {
   const [modalOpen, setModalOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [exchangeRate, setExchangeRate] = useState(385) // AED to KRW
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE)
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<string | null>(null)
   const [selectedBudgetCategoryIds, setSelectedBudgetCategoryIds] = useState<string[]>([])
   const [budgetDisplayCurrency, setBudgetDisplayCurrency] = useState<'KRW' | 'AED'>(() => {
-    const saved = localStorage.getItem('budget_display_currency')
+    const saved = localStorage.getItem(STORAGE_KEYS.BUDGET_DISPLAY_CURRENCY)
     return (saved === 'AED' || saved === 'KRW') ? saved : 'KRW'
   })
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
@@ -73,23 +74,23 @@ export default function Transactions() {
 
   // 필터 - localStorage에서 마지막 선택한 년월 불러오기
   const [selectedYear, setSelectedYear] = useState(() => {
-    const saved = localStorage.getItem('transactions_selected_year')
+    const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS_YEAR)
     return saved ? parseInt(saved, 10) : new Date().getFullYear()
   })
   const [selectedMonth, setSelectedMonth] = useState(() => {
-    const saved = localStorage.getItem('transactions_selected_month')
+    const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS_MONTH)
     return saved ? parseInt(saved, 10) : new Date().getMonth() + 1
   })
 
   // 년월 변경 시 localStorage에 저장
   useEffect(() => {
-    localStorage.setItem('transactions_selected_year', String(selectedYear))
-    localStorage.setItem('transactions_selected_month', String(selectedMonth))
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS_YEAR, String(selectedYear))
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS_MONTH, String(selectedMonth))
   }, [selectedYear, selectedMonth])
 
   // 예산 표시 화폐 변경 시 localStorage에 저장
   useEffect(() => {
-    localStorage.setItem('budget_display_currency', budgetDisplayCurrency)
+    localStorage.setItem(STORAGE_KEYS.BUDGET_DISPLAY_CURRENCY, budgetDisplayCurrency)
   }, [budgetDisplayCurrency])
 
   // 월별 데이터 존재 여부
@@ -120,7 +121,7 @@ export default function Transactions() {
   const loadExchangeRate = async () => {
     try {
       const result = (await window.electronAPI.db.query(
-        `SELECT value FROM settings WHERE key = 'aed_to_krw_rate'`
+        `SELECT value FROM settings WHERE key = '${SETTINGS_KEYS.AED_TO_KRW_RATE}'`
       )) as { value: string }[]
       if (result.length > 0) {
         setExchangeRate(parseFloat(result[0].value))
