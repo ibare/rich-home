@@ -13,10 +13,11 @@ import {
   Typography,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import CategoryPicker from '../shared/CategoryPicker'
 import { useToast } from '../../contexts/ToastContext'
+import { getBudgetItemCategoryIds, getUsedCategoryMap, createBudgetItem, updateBudgetItem } from '../../repositories/budgetRepository'
+import { getExpenseCategories } from '../../repositories/categoryRepository'
 
 interface BudgetItem {
   id: string
@@ -73,11 +74,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
     if (!editItem) return
 
     try {
-      // 연결된 카테고리 조회
-      const categoryResult = await window.electronAPI.db.query(
-        'SELECT category_id FROM budget_item_categories WHERE budget_item_id = ?',
-        [editItem.id]
-      ) as { category_id: string }[]
+      const categoryIds = await getBudgetItemCategoryIds(editItem.id)
 
       setFormData({
         name: editItem.name,
@@ -85,7 +82,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
         base_amount: editItem.base_amount.toLocaleString(),
         currency: editItem.currency,
         memo: editItem.memo || '',
-        category_ids: categoryResult.map((r) => r.category_id),
+        category_ids: categoryIds,
       })
     } catch (error) {
       console.error('Failed to load edit item data:', error)
@@ -94,18 +91,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
 
   const loadUsedCategories = async () => {
     try {
-      const excludeId = editItem?.id || ''
-      const result = await window.electronAPI.db.query(
-        `SELECT bic.category_id, bi.name as budget_name
-         FROM budget_item_categories bic
-         JOIN budget_items bi ON bi.id = bic.budget_item_id
-         WHERE bi.is_active = 1 AND bi.id != ?`,
-        [excludeId]
-      ) as { category_id: string; budget_name: string }[]
-      const map: Record<string, string> = {}
-      for (const row of result) {
-        map[row.category_id] = row.budget_name
-      }
+      const map = await getUsedCategoryMap(editItem?.id || '')
       setUsedCategoryMap(map)
     } catch (error) {
       console.error('Failed to load used categories:', error)
@@ -114,9 +100,7 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
 
   const loadCategories = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        "SELECT * FROM categories WHERE is_active = 1 AND type = 'expense' ORDER BY expense_type, name"
-      )
+      const result = await getExpenseCategories()
       setCategories(result as Category[])
     } catch (error) {
       console.error('Failed to load categories:', error)
@@ -151,57 +135,19 @@ export default function BudgetItemModal({ open, onClose, onSaved, editItem }: Bu
 
     setSaving(true)
     try {
+      const data = {
+        name: formData.name,
+        group_name: formData.group_name || null,
+        base_amount: amount,
+        currency: formData.currency,
+        memo: formData.memo || null,
+        category_ids: formData.category_ids,
+      }
+
       if (isEditMode && editItem) {
-        await window.electronAPI.db.query(
-          `UPDATE budget_items SET name = ?, group_name = ?, base_amount = ?, currency = ?, memo = ?, updated_at = datetime('now')
-           WHERE id = ?`,
-          [
-            formData.name,
-            formData.group_name || null,
-            amount,
-            formData.currency,
-            formData.memo || null,
-            editItem.id,
-          ]
-        )
-
-        // 기존 카테고리 매핑 삭제 후 재등록
-        await window.electronAPI.db.query(
-          'DELETE FROM budget_item_categories WHERE budget_item_id = ?',
-          [editItem.id]
-        )
-
-        for (const categoryId of formData.category_ids) {
-          await window.electronAPI.db.query(
-            `INSERT INTO budget_item_categories (id, budget_item_id, category_id)
-             VALUES (?, ?, ?)`,
-            [uuidv4(), editItem.id, categoryId]
-          )
-        }
+        await updateBudgetItem(editItem.id, data)
       } else {
-        // 추가 모드
-        const budgetItemId = uuidv4()
-
-        await window.electronAPI.db.query(
-          `INSERT INTO budget_items (id, name, group_name, base_amount, currency, memo)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            budgetItemId,
-            formData.name,
-            formData.group_name || null,
-            amount,
-            formData.currency,
-            formData.memo || null,
-          ]
-        )
-
-        for (const categoryId of formData.category_ids) {
-          await window.electronAPI.db.query(
-            `INSERT INTO budget_item_categories (id, budget_item_id, category_id)
-             VALUES (?, ?, ?)`,
-            [uuidv4(), budgetItemId, categoryId]
-          )
-        }
+        await createBudgetItem(data)
       }
 
       resetForm()

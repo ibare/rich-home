@@ -18,8 +18,8 @@ import {
   Radio,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import { useToast } from '../../contexts/ToastContext'
+import { createAccount } from '../../repositories/accountRepository'
 
 interface AccountModalProps {
   open: boolean
@@ -69,28 +69,13 @@ export default function AccountModal({ open, onClose, onSaved }: AccountModalPro
 
     setSaving(true)
     try {
-      const id = uuidv4()
-      // name은 은행명으로 자동 설정
-      await window.electronAPI.db.query(
-        `INSERT INTO accounts (id, name, owner, type, bank_name, account_number, currency)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          formData.bank_name,
-          formData.owner,
-          formData.type,
-          formData.bank_name,
-          formData.account_number || null,
-          formData.currency,
-        ]
-      )
-
-      // 초기 잔고 0으로 설정
-      await window.electronAPI.db.query(
-        `INSERT INTO account_balances (id, account_id, balance, recorded_at)
-         VALUES (?, ?, ?, datetime('now'))`,
-        [uuidv4(), id, 0]
-      )
+      await createAccount({
+        owner: formData.owner,
+        type: formData.type,
+        bank_name: formData.bank_name,
+        account_number: formData.account_number || null,
+        currency: formData.currency,
+      })
 
       setFormData({
         owner: 'self',

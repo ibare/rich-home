@@ -113,3 +113,69 @@ export async function getBudgetCategoryIds(budgetItemId: string): Promise<string
   ) as { category_id: string }[]
   return result.map(r => r.category_id)
 }
+
+// 카테고리별 입력 내용 자동완성 조회
+export async function getDescriptionSuggestions(categoryId: string): Promise<string[]> {
+  const result = await window.electronAPI.db.query(
+    `SELECT DISTINCT description FROM transactions
+     WHERE category_id = ? AND description IS NOT NULL AND description != ''
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [categoryId]
+  ) as { description: string }[]
+  return result.map(r => r.description)
+}
+
+// 태그 목록 조회
+export async function getTagSuggestions(): Promise<string[]> {
+  const result = await window.electronAPI.db.query(
+    `SELECT DISTINCT tag FROM transactions
+     WHERE tag IS NOT NULL AND tag != ''`
+  ) as { tag: string }[]
+  const allTags = new Set<string>()
+  result.forEach(r => {
+    r.tag.split(',').forEach(t => {
+      const trimmed = t.trim()
+      if (trimmed) allTags.add(trimmed)
+    })
+  })
+  return Array.from(allTags).sort()
+}
+
+// 거래 수정
+export async function updateTransaction(id: string, data: {
+  type: string
+  amount: number
+  currency: string
+  category_id: string
+  date: string
+  description: string | null
+  include_in_stats: number
+  tag: string | null
+}) {
+  await window.electronAPI.db.query(
+    `UPDATE transactions
+     SET type = ?, amount = ?, currency = ?, category_id = ?, date = ?, description = ?, include_in_stats = ?, tag = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+    [data.type, data.amount, data.currency, data.category_id, data.date, data.description, data.include_in_stats, data.tag, id]
+  )
+}
+
+// 거래 생성
+export async function createTransaction(data: {
+  id: string
+  type: string
+  amount: number
+  currency: string
+  category_id: string
+  date: string
+  description: string | null
+  include_in_stats: number
+  tag: string | null
+}) {
+  await window.electronAPI.db.query(
+    `INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats, tag)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [data.id, data.type, data.amount, data.currency, data.category_id, data.date, data.description, data.include_in_stats, data.tag]
+  )
+}

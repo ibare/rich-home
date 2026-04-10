@@ -13,6 +13,7 @@ import { usePageContext } from '../contexts/PageContext'
 import LiabilityModal from '../components/modals/LiabilityModal'
 import AmountText from '../components/shared/AmountText'
 import { useExchangeRate } from '../hooks/useExchangeRate'
+import { getActiveLiabilities as fetchLiabilities } from '../repositories/liabilityRepository'
 
 interface Liability {
   id: string
@@ -64,9 +65,7 @@ export default function Liabilities() {
 
   const loadData = async () => {
     try {
-      const liabilitiesResult = await window.electronAPI.db.query(
-        'SELECT * FROM liabilities WHERE is_active = 1 ORDER BY type, start_date DESC'
-      )
+      const liabilitiesResult = await fetchLiabilities()
       setLiabilities(liabilitiesResult as Liability[])
     } catch (error) {
       console.error('Failed to load liabilities:', error)

@@ -19,6 +19,7 @@ import { usePageContext } from '../contexts/PageContext'
 import AccountModal from '../components/modals/AccountModal'
 import AmountText from '../components/shared/AmountText'
 import { useToast } from '../contexts/ToastContext'
+import { getAccounts as fetchAccounts, deleteAccountWithBalances } from '../repositories/accountRepository'
 
 interface Account {
   id: string
@@ -104,30 +105,13 @@ export default function Accounts() {
 
   const loadAccounts = async () => {
     try {
-      // 전달 날짜 범위 계산
       const now = new Date()
       const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
       const prevMonthStr = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`
       const currentMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`
 
-      const result = await window.electronAPI.db.query(`
-        SELECT
-          a.*,
-          (SELECT balance FROM account_balances
-           WHERE account_id = a.id
-           ORDER BY recorded_at DESC LIMIT 1) as latest_balance,
-          (SELECT recorded_at FROM account_balances
-           WHERE account_id = a.id
-           ORDER BY recorded_at DESC LIMIT 1) as latest_recorded_at,
-          (SELECT COUNT(*) FROM account_balances
-           WHERE account_id = a.id
-           AND memo LIKE '%[자동]%'
-           AND recorded_at >= ? AND recorded_at < ?) as has_auto_prev_month
-        FROM accounts a
-        WHERE a.is_active = 1
-        ORDER BY a.owner, a.bank_name
-      `, [prevMonthStr, currentMonthStr])
+      const result = await fetchAccounts(prevMonthStr, currentMonthStr)
       setAccounts(result as Account[])
     } catch (error) {
       console.error('Failed to load accounts:', error)
@@ -146,16 +130,7 @@ export default function Accounts() {
     if (!deletingAccount) return
 
     try {
-      // 잔고 데이터 먼저 삭제
-      await window.electronAPI.db.query(
-        'DELETE FROM account_balances WHERE account_id = ?',
-        [deletingAccount.id]
-      )
-      // 계좌 삭제
-      await window.electronAPI.db.query(
-        'DELETE FROM accounts WHERE id = ?',
-        [deletingAccount.id]
-      )
+      await deleteAccountWithBalances(deletingAccount.id)
 
       setDeleteDialogOpen(false)
       setDeletingAccount(null)

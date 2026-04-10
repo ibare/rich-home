@@ -24,6 +24,7 @@ import { usePageContext } from '../contexts/PageContext'
 import AutoTransactionRuleModal from '../components/modals/AutoTransactionRuleModal'
 import AmountText from '../components/shared/AmountText'
 import { useToast } from '../contexts/ToastContext'
+import { getAutoTransactionRules, deleteAutoTransactionRule } from '../repositories/autoTransactionRepository'
 
 interface AutoTransactionRule {
   id: string
@@ -64,14 +65,7 @@ export default function AutoTransactions() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.db.query(`
-        SELECT atr.*, c.name as category_name, a.name as account_name
-        FROM auto_transaction_rules atr
-        LEFT JOIN categories c ON atr.category_id = c.id
-        LEFT JOIN accounts a ON atr.account_id = a.id
-        WHERE atr.is_active = 1
-        ORDER BY atr.sort_order, atr.name
-      `)
+      const result = await getAutoTransactionRules()
       setRules(result as AutoTransactionRule[])
     } catch (error) {
       console.error('Failed to load auto transaction rules:', error)
@@ -115,10 +109,7 @@ export default function AutoTransactions() {
   const handleDelete = async () => {
     if (!deletingItem) return
     try {
-      await window.electronAPI.db.query(
-        'DELETE FROM auto_transaction_rules WHERE id = ?',
-        [deletingItem.id]
-      )
+      await deleteAutoTransactionRule(deletingItem.id)
       setDeleteDialogOpen(false)
       setDeletingItem(null)
       loadData()

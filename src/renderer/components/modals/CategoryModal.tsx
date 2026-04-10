@@ -20,8 +20,14 @@ import {
   Typography,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import { useToast } from '../../contexts/ToastContext'
+import {
+  createCategory,
+  updateCategory,
+  getTransactionCountByCategory,
+  getReplacementCategories,
+  deleteCategory,
+} from '../../repositories/categoryRepository'
 
 interface Category {
   id: string
@@ -117,39 +123,17 @@ export default function CategoryModal({
 
     setSaving(true)
     try {
-      if (isEditing) {
-        await window.electronAPI.db.query(
-          `UPDATE categories
-           SET name = ?, type = ?, expense_type = ?, color = ?
-           WHERE id = ?`,
-          [
-            formData.name.trim(),
-            formData.type,
-            formData.type === 'expense' ? formData.expense_type : null,
-            formData.color,
-            editingCategory.id,
-          ]
-        )
-      } else {
-        // 새 카테고리의 sort_order 결정
-        const maxOrderResult = await window.electronAPI.db.get(
-          `SELECT MAX(sort_order) as max_order FROM categories WHERE type = ? AND expense_type = ?`,
-          [formData.type, formData.type === 'expense' ? formData.expense_type : null]
-        )
-        const nextOrder = ((maxOrderResult as { max_order: number | null })?.max_order ?? 0) + 1
+      const data = {
+        name: formData.name.trim(),
+        type: formData.type,
+        expense_type: formData.type === 'expense' ? formData.expense_type : null,
+        color: formData.color,
+      }
 
-        await window.electronAPI.db.query(
-          `INSERT INTO categories (id, name, type, expense_type, color, icon, sort_order, is_active)
-           VALUES (?, ?, ?, ?, ?, '', ?, 1)`,
-          [
-            uuidv4(),
-            formData.name.trim(),
-            formData.type,
-            formData.type === 'expense' ? formData.expense_type : null,
-            formData.color,
-            nextOrder,
-          ]
-        )
+      if (isEditing) {
+        await updateCategory(editingCategory.id, data)
+      } else {
+        await createCategory(data)
       }
 
       onSaved()
@@ -177,20 +161,12 @@ export default function CategoryModal({
     if (!editingCategory) return
 
     try {
-      // 해당 카테고리를 사용하는 거래 수 확인
-      const result = await window.electronAPI.db.get(
-        'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?',
-        [editingCategory.id]
-      ) as { count: number }
-      setTransactionCount(result.count)
+      const count = await getTransactionCountByCategory(editingCategory.id)
+      setTransactionCount(count)
 
-      // 대체 가능한 카테고리 목록 조회 (같은 타입의 카테고리만)
-      if (result.count > 0) {
-        const categories = await window.electronAPI.db.query(
-          'SELECT * FROM categories WHERE is_active = 1 AND id != ? AND type = ? ORDER BY expense_type, name',
-          [editingCategory.id, editingCategory.type]
-        ) as Category[]
-        setAvailableCategories(categories)
+      if (count > 0) {
+        const categories = await getReplacementCategories(editingCategory.id, editingCategory.type)
+        setAvailableCategories(categories as Category[])
         setReplacementCategoryId('')
       }
 
@@ -211,23 +187,9 @@ export default function CategoryModal({
     }
 
     try {
-      // 연결된 거래가 있으면 대체 카테고리로 변경
-      if (transactionCount > 0 && replacementCategoryId) {
-        await window.electronAPI.db.query(
-          'UPDATE transactions SET category_id = ? WHERE category_id = ?',
-          [replacementCategoryId, editingCategory.id]
-        )
-      }
-
-      // 예산 항목 연결 삭제
-      await window.electronAPI.db.query(
-        'DELETE FROM budget_item_categories WHERE category_id = ?',
-        [editingCategory.id]
-      )
-      // 카테고리 삭제
-      await window.electronAPI.db.query(
-        'DELETE FROM categories WHERE id = ?',
-        [editingCategory.id]
+      await deleteCategory(
+        editingCategory.id,
+        transactionCount > 0 ? replacementCategoryId : undefined
       )
 
       setDeleteDialogOpen(false)

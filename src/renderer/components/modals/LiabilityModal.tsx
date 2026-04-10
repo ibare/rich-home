@@ -14,9 +14,9 @@ import {
   IconButton,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import { useToast } from '../../contexts/ToastContext'
+import { createLiability, updateLiability } from '../../repositories/liabilityRepository'
 
 interface Liability {
   id: string
@@ -122,40 +122,22 @@ export default function LiabilityModal({ open, onClose, onSaved, editItem }: Lia
 
     setSaving(true)
     try {
+      const data = {
+        name: formData.name,
+        type: formData.type,
+        principal_amount: principalAmount,
+        current_balance: currentBalance,
+        interest_rate: interestRate,
+        start_date: formData.start_date,
+        end_date: formData.end_date || null,
+        currency: formData.currency,
+        memo: formData.memo || null,
+      }
+
       if (isEditMode && editItem) {
-        await window.electronAPI.db.query(
-          `UPDATE liabilities SET name = ?, type = ?, principal_amount = ?, current_balance = ?, interest_rate = ?, start_date = ?, end_date = ?, currency = ?, memo = ?
-           WHERE id = ?`,
-          [
-            formData.name,
-            formData.type,
-            principalAmount,
-            currentBalance,
-            interestRate,
-            formData.start_date,
-            formData.end_date || null,
-            formData.currency,
-            formData.memo || null,
-            editItem.id,
-          ]
-        )
+        await updateLiability(editItem.id, data)
       } else {
-        await window.electronAPI.db.query(
-          `INSERT INTO liabilities (id, name, type, principal_amount, current_balance, interest_rate, start_date, end_date, currency, memo)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            uuidv4(),
-            formData.name,
-            formData.type,
-            principalAmount,
-            currentBalance,
-            interestRate,
-            formData.start_date,
-            formData.end_date || null,
-            formData.currency,
-            formData.memo || null,
-          ]
-        )
+        await createLiability(data)
       }
 
       resetForm()

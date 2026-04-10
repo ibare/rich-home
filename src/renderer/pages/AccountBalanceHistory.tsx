@@ -21,6 +21,7 @@ import { usePageContext } from '../contexts/PageContext'
 import BalanceModal from '../components/modals/BalanceModal'
 import AmountText from '../components/shared/AmountText'
 import { useToast } from '../contexts/ToastContext'
+import { getAccount as fetchAccount, getAccountBalances, deleteBalance } from '../repositories/accountRepository'
 
 interface Account {
   id: string
@@ -79,14 +80,8 @@ export default function AccountBalanceHistory() {
   const loadData = async () => {
     try {
       const [accountResult, balancesResult] = await Promise.all([
-        window.electronAPI.db.get(
-          'SELECT * FROM accounts WHERE id = ?',
-          [accountId]
-        ),
-        window.electronAPI.db.query(
-          'SELECT * FROM account_balances WHERE account_id = ? ORDER BY recorded_at DESC',
-          [accountId]
-        ),
+        fetchAccount(accountId!),
+        getAccountBalances(accountId!),
       ])
       const acc = accountResult as Account
       setAccount(acc)
@@ -105,10 +100,7 @@ export default function AccountBalanceHistory() {
     if (!confirm('이 잔고 기록을 삭제하시겠습니까?')) return
 
     try {
-      await window.electronAPI.db.query(
-        'DELETE FROM account_balances WHERE id = ?',
-        [balanceId]
-      )
+      await deleteBalance(balanceId)
       loadData()
     } catch (error) {
       console.error('Failed to delete balance:', error)

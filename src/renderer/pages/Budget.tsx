@@ -28,6 +28,7 @@ import BudgetItemModal from '../components/modals/BudgetItemModal'
 import { useExchangeRate } from '../hooks/useExchangeRate'
 import AmountText from '../components/shared/AmountText'
 import { useToast } from '../contexts/ToastContext'
+import { getBudgetItems as fetchBudgetItems, deleteBudgetItem } from '../repositories/budgetRepository'
 
 interface BudgetItem {
   id: string
@@ -71,17 +72,7 @@ export default function Budget() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.db.query(`
-        SELECT bi.id, bi.name, bi.group_name, bi.base_amount, bi.currency,
-               bi.memo, bi.is_active,
-               GROUP_CONCAT(c.name, ', ') as category_names
-        FROM budget_items bi
-        LEFT JOIN budget_item_categories bic ON bi.id = bic.budget_item_id
-        LEFT JOIN categories c ON bic.category_id = c.id
-        WHERE bi.is_active = 1
-        GROUP BY bi.id
-        ORDER BY bi.group_name, bi.sort_order, bi.name
-      `)
+      const result = await fetchBudgetItems()
       setBudgetItems(result as BudgetItem[])
     } catch (error) {
       console.error('Failed to load budget data:', error)
@@ -108,14 +99,7 @@ export default function Budget() {
     if (!deletingItem) return
 
     try {
-      await window.electronAPI.db.query(
-        'DELETE FROM budget_item_categories WHERE budget_item_id = ?',
-        [deletingItem.id]
-      )
-      await window.electronAPI.db.query(
-        'DELETE FROM budget_items WHERE id = ?',
-        [deletingItem.id]
-      )
+      await deleteBudgetItem(deletingItem.id)
 
       setDeleteDialogOpen(false)
       setDeletingItem(null)

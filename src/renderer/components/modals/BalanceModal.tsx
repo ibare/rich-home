@@ -10,9 +10,9 @@ import {
   IconButton,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import { useToast } from '../../contexts/ToastContext'
+import { createBalance, updateBalance } from '../../repositories/accountRepository'
 
 interface EditBalanceItem {
   id: string
@@ -68,17 +68,11 @@ export default function BalanceModal({
 
     setSaving(true)
     try {
+      const formattedDate = recordedAt.replace('T', ' ') + ':00'
       if (editItem) {
-        await window.electronAPI.db.query(
-          `UPDATE account_balances SET balance = ?, recorded_at = ? WHERE id = ?`,
-          [balanceNum, recordedAt.replace('T', ' ') + ':00', editItem.id]
-        )
+        await updateBalance(editItem.id, balanceNum, formattedDate)
       } else {
-        await window.electronAPI.db.query(
-          `INSERT INTO account_balances (id, account_id, balance, recorded_at)
-           VALUES (?, ?, ?, ?)`,
-          [uuidv4(), accountId, balanceNum, recordedAt.replace('T', ' ') + ':00']
-        )
+        await createBalance(accountId, balanceNum, formattedDate)
       }
 
       onSaved()

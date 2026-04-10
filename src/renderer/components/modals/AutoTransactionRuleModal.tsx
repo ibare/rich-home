@@ -17,10 +17,12 @@ import {
   Typography,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import CategoryPicker from '../shared/CategoryPicker'
 import { useToast } from '../../contexts/ToastContext'
+import { getExpenseCategories } from '../../repositories/categoryRepository'
+import { getActiveAccounts } from '../../repositories/accountRepository'
+import { createAutoTransactionRule, updateAutoTransactionRule } from '../../repositories/autoTransactionRepository'
 
 interface AutoTransactionRule {
   id: string
@@ -103,9 +105,7 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
 
   const loadCategories = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        "SELECT * FROM categories WHERE is_active = 1 AND type = 'expense' ORDER BY expense_type, name"
-      )
+      const result = await getExpenseCategories()
       setCategories(result as Category[])
     } catch (error) {
       console.error('Failed to load categories:', error)
@@ -114,9 +114,7 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
 
   const loadAccounts = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        'SELECT id, name, owner, currency FROM accounts WHERE is_active = 1 ORDER BY owner, name'
-      )
+      const result = await getActiveAccounts()
       setAccounts(result as Account[])
     } catch (error) {
       console.error('Failed to load accounts:', error)
@@ -175,41 +173,24 @@ export default function AutoTransactionRuleModal({ open, onClose, onSaved, editI
     try {
       const accountId = formData.rule_type === 'fixed_monthly' ? (formData.account_id || null) : null
 
+      const data = {
+        name: formData.name,
+        base_amount: amount,
+        currency: formData.currency,
+        category_id: formData.category_id || null,
+        account_id: accountId,
+        valid_from: formData.valid_from || null,
+        valid_to: formData.valid_to || null,
+        memo: formData.memo || null,
+      }
+
       if (isEditMode && editItem) {
-        await window.electronAPI.db.query(
-          `UPDATE auto_transaction_rules
-           SET name = ?, base_amount = ?, currency = ?, category_id = ?, account_id = ?,
-               valid_from = ?, valid_to = ?, memo = ?, updated_at = datetime('now')
-           WHERE id = ?`,
-          [
-            formData.name,
-            amount,
-            formData.currency,
-            formData.category_id || null,
-            accountId,
-            formData.valid_from || null,
-            formData.valid_to || null,
-            formData.memo || null,
-            editItem.id,
-          ]
-        )
+        await updateAutoTransactionRule(editItem.id, data)
       } else {
-        await window.electronAPI.db.query(
-          `INSERT INTO auto_transaction_rules (id, name, rule_type, base_amount, currency, category_id, account_id, valid_from, valid_to, memo)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            uuidv4(),
-            formData.name,
-            formData.rule_type,
-            amount,
-            formData.currency,
-            formData.category_id || null,
-            accountId,
-            formData.valid_from || null,
-            formData.valid_to || null,
-            formData.memo || null,
-          ]
-        )
+        await createAutoTransactionRule({
+          ...data,
+          rule_type: formData.rule_type,
+        })
       }
 
       resetForm()

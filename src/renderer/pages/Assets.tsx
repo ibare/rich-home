@@ -19,6 +19,8 @@ import AssetModal from '../components/modals/AssetModal'
 import AmountText from '../components/shared/AmountText'
 import { useExchangeRate } from '../hooks/useExchangeRate'
 import { useToast } from '../contexts/ToastContext'
+import { getActiveAssets, deleteAsset } from '../repositories/assetRepository'
+import { getLiabilityBalances } from '../repositories/liabilityRepository'
 
 interface Asset {
   id: string
@@ -66,12 +68,8 @@ export default function Assets() {
   const loadData = async () => {
     try {
       const [assetsResult, liabilitiesResult] = await Promise.all([
-        window.electronAPI.db.query(
-          'SELECT * FROM assets WHERE is_active = 1 ORDER BY type, purchase_date DESC'
-        ),
-        window.electronAPI.db.query(
-          'SELECT current_balance, currency FROM liabilities WHERE is_active = 1'
-        ),
+        getActiveAssets(),
+        getLiabilityBalances(),
       ])
       setAssets(assetsResult as Asset[])
 
@@ -110,10 +108,7 @@ export default function Assets() {
     if (!deletingAsset) return
 
     try {
-      await window.electronAPI.db.query(
-        'DELETE FROM assets WHERE id = ?',
-        [deletingAsset.id]
-      )
+      await deleteAsset(deletingAsset.id)
 
       setDeleteDialogOpen(false)
       setDeletingAsset(null)

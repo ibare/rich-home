@@ -29,6 +29,8 @@ import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import CategoryPicker from '../shared/CategoryPicker'
 import { useToast } from '../../contexts/ToastContext'
+import { getAllActiveCategories } from '../../repositories/categoryRepository'
+import { getDescriptionSuggestions, getTagSuggestions, updateTransaction, createTransaction } from '../../repositories/transactionRepository'
 
 interface EditTransaction {
   id: string
@@ -110,7 +112,7 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
   useEffect(() => {
     if (open) {
       loadCategories()
-      loadTagSuggestions()
+      loadTagSuggestionsData()
       if (editTransaction) {
         // 수정 모드: 기존 데이터로 폼 채우기
         const existingTags = editTransaction.tag
@@ -139,56 +141,29 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
 
   const loadCategories = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        'SELECT * FROM categories WHERE is_active = 1 ORDER BY type, expense_type, name'
-      )
+      const result = await getAllActiveCategories()
       setCategories(result as Category[])
     } catch (error) {
       console.error('Failed to load categories:', error)
     }
   }
 
-  // 카테고리별 이전 입력 내용 조회
   const loadDescriptionSuggestions = async (categoryId: string) => {
     if (!categoryId) {
       setDescriptionSuggestions([])
       return
     }
-
     try {
-      const result = await window.electronAPI.db.query(
-        `SELECT DISTINCT description FROM transactions
-         WHERE category_id = ? AND description IS NOT NULL AND description != ''
-         ORDER BY created_at DESC
-         LIMIT 20`,
-        [categoryId]
-      ) as { description: string }[]
-
-      setDescriptionSuggestions(result.map((r) => r.description))
+      setDescriptionSuggestions(await getDescriptionSuggestions(categoryId))
     } catch (error) {
       console.error('Failed to load description suggestions:', error)
       setDescriptionSuggestions([])
     }
   }
 
-  // 기존 거래에서 태그 목록 조회 (그룹핑)
-  const loadTagSuggestions = async () => {
+  const loadTagSuggestionsData = async () => {
     try {
-      const result = await window.electronAPI.db.query(
-        `SELECT DISTINCT tag FROM transactions
-         WHERE tag IS NOT NULL AND tag != ''`
-      ) as { tag: string }[]
-
-      // 컴마로 구분된 태그들을 분리하고 중복 제거
-      const allTags = new Set<string>()
-      result.forEach(r => {
-        r.tag.split(',').forEach(t => {
-          const trimmed = t.trim()
-          if (trimmed) allTags.add(trimmed)
-        })
-      })
-
-      setTagSuggestions(Array.from(allTags).sort())
+      setTagSuggestions(await getTagSuggestions())
     } catch (error) {
       console.error('Failed to load tag suggestions:', error)
       setTagSuggestions([])
@@ -277,22 +252,16 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     setSaving(true)
     try {
       const tagString = formData.tags.length > 0 ? formData.tags.join(', ') : null
-      await window.electronAPI.db.query(
-        `UPDATE transactions
-         SET type = ?, amount = ?, currency = ?, category_id = ?, date = ?, description = ?, include_in_stats = ?, tag = ?, updated_at = datetime('now')
-         WHERE id = ?`,
-        [
-          formData.type,
-          amount,
-          formData.currency,
-          formData.category_id,
-          formData.date,
-          formData.description || null,
-          formData.include_in_stats ? 1 : 0,
-          tagString,
-          editTransaction.id,
-        ]
-      )
+      await updateTransaction(editTransaction.id, {
+        type: formData.type,
+        amount,
+        currency: formData.currency,
+        category_id: formData.category_id,
+        date: formData.date,
+        description: formData.description || null,
+        include_in_stats: formData.include_in_stats ? 1 : 0,
+        tag: tagString,
+      })
 
       resetForm()
       onSaved()
@@ -316,11 +285,17 @@ export default function TransactionModal({ open, onClose, onSaved, selectedYear,
     try {
       for (const tx of pendingList) {
         const tagString = tx.tags.length > 0 ? tx.tags.join(', ') : null
-        await window.electronAPI.db.query(
-          `INSERT INTO transactions (id, type, amount, currency, category_id, date, description, include_in_stats, tag)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [tx.id, tx.type, tx.amount, tx.currency, tx.category_id, tx.date, tx.description || null, tx.include_in_stats ? 1 : 0, tagString]
-        )
+        await createTransaction({
+          id: tx.id,
+          type: tx.type,
+          amount: tx.amount,
+          currency: tx.currency,
+          category_id: tx.category_id,
+          date: tx.date,
+          description: tx.description || null,
+          include_in_stats: tx.include_in_stats ? 1 : 0,
+          tag: tagString,
+        })
       }
 
       setPendingList([])

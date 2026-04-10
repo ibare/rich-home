@@ -15,9 +15,9 @@ import {
   Radio,
 } from '@mui/material'
 import { IconX } from '@tabler/icons-react'
-import { v4 as uuidv4 } from 'uuid'
 import AmountInput from '../shared/AmountInput'
 import { useToast } from '../../contexts/ToastContext'
+import { createAsset } from '../../repositories/assetRepository'
 
 interface AssetModalProps {
   open: boolean
@@ -72,20 +72,15 @@ export default function AssetModal({ open, onClose, onSaved }: AssetModalProps) 
 
     setSaving(true)
     try {
-      await window.electronAPI.db.query(
-        `INSERT INTO assets (id, name, type, purchase_amount, purchase_date, quantity, currency, memo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          uuidv4(),
-          formData.name,
-          formData.type,
-          amount,
-          formData.purchase_date,
-          quantity,
-          formData.currency,
-          formData.memo || null,
-        ]
-      )
+      await createAsset({
+        name: formData.name,
+        type: formData.type,
+        purchase_amount: amount,
+        purchase_date: formData.purchase_date,
+        quantity,
+        currency: formData.currency,
+        memo: formData.memo || null,
+      })
 
       resetForm()
       onSaved()

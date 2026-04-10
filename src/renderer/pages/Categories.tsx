@@ -14,6 +14,7 @@ import { IconCircleFilled } from '@tabler/icons-react'
 import { usePageContext } from '../contexts/PageContext'
 import DashboardCard from '../components/shared/DashboardCard'
 import CategoryModal from '../components/modals/CategoryModal'
+import { getCategoriesWithBudgetNames } from '../repositories/categoryRepository'
 
 interface Category {
   id: string
@@ -128,15 +129,7 @@ export default function Categories() {
 
   const loadCategories = async () => {
     try {
-      const result = await window.electronAPI.db.query(`
-        SELECT c.*, GROUP_CONCAT(bi.name, ', ') as budget_item_names
-        FROM categories c
-        LEFT JOIN budget_item_categories bic ON c.id = bic.category_id
-        LEFT JOIN budget_items bi ON bic.budget_item_id = bi.id AND bi.is_active = 1
-        WHERE c.is_active = 1
-        GROUP BY c.id
-        ORDER BY c.type, c.expense_type, c.name
-      `)
+      const result = await getCategoriesWithBudgetNames()
       setCategories(result as Category[])
     } catch (error) {
       console.error('Failed to load categories:', error)
